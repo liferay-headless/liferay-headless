@@ -6,7 +6,3 @@ Please make sure you answer the following questions in the PR's description:
 1. What is being changed?
 2. Why is it being changed?
 3. How can we test the changes?
-
-These are the team members that contribute code:
-- Backend: [@4lejandrito](https://github.com/4lejandrito), [@ccorrea](https://github.com/ccorrea), [@jalber786](https://github.com/jalber786), [@matijapetanjek](https://github.com/matijapetanjek), [@sergiojimcos](https://github.com/sergiojimcos).
-- QA: [@magjed4289](https://github.com/magjed4289), [@Hijky](https://github.com/Hijky), [@yanan](https://github.com/yanan).
