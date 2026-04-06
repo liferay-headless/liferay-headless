@@ -113,5 +113,10 @@ tools/portal-tools-db-upgrade-client/db_upgrade_client.sh -j "-Xmx8192m"
 
 MYSQL_PWD="$DB_PASS" mysql --max-allowed-packet=512M -u"$DB_USER" "$DB_NAME" < ../liferay.com/dumps/2-UpdateObjectField.sql
 
+MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "UPDATE AssetListEntrySegmentsEntryRel SET typeSettings = replace(typeSettings, '514411727,', '') WHERE typeSettings LIKE '%514411727%';"
+MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "DELETE FROM AssetListEntrySegmentsEntryRel WHERE segmentsEntryId = 0;"
+
+echo ">>> MANUAL STEP: Remove Geocoded segments (e.g. 'Entry Country Finland Geocoded Visitors') from the Segments admin panel — they are not available in this environment."
+
 echo ">>> Starting Tomcat..."
 ${BUNDLES_DIR}/${TOMCAT_DIR}/bin/catalina.sh jpda run
