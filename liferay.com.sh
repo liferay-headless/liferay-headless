@@ -115,8 +115,8 @@ MYSQL_PWD="$DB_PASS" mysql --max-allowed-packet=512M -u"$DB_USER" "$DB_NAME" < .
 
 MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "UPDATE AssetListEntrySegmentsEntryRel SET typeSettings = replace(typeSettings, '514411727,', '') WHERE typeSettings LIKE '%514411727%';"
 MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "DELETE FROM AssetListEntrySegmentsEntryRel WHERE segmentsEntryId = 0;"
-
-echo ">>> MANUAL STEP: Remove Geocoded segments (e.g. 'Entry Country Finland Geocoded Visitors') from the Segments admin panel — they are not available in this environment."
+MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "DELETE FROM AssetListEntrySegmentsEntryRel WHERE segmentsEntryId IN (SELECT segmentsEntryId FROM SegmentsEntry WHERE name LIKE '%Geocoded%');"
+MYSQL_PWD="$DB_PASS" mysql -u"$DB_USER" "$DB_NAME" -e "DELETE FROM SegmentsEntry WHERE name LIKE '%Geocoded%';"
 
 echo ">>> Starting Tomcat..."
 ${BUNDLES_DIR}/${TOMCAT_DIR}/bin/catalina.sh jpda run
