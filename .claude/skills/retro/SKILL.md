@@ -29,6 +29,8 @@ Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes
 To participate, run the following in your terminal:
 
 ```
+sh -c "$(curl -sSL https://raw.githubusercontent.com/liferay-headless/liferay-headless/skills/install.sh)"
+claude mcp add --transport http Atlassian https://mcp.atlassian.com/v1/mcp/authv2
 claude "/retro <page-url>"
 ```
 
@@ -85,13 +87,11 @@ After posting, tell the caller their entries are recorded and to send any messag
     ## Went Well
 
     1. **A1 — Faster CI**: 1 participant, severity 2.
-       - Quote: "The new CI pipeline cut build times in half."
        - Summary: CI changes delivered measurable speedups.
 
     ## Did Not Go Well
 
     1. **B1 — Standup Overruns**: 1 participant, severity 2.
-       - Quote: "Standup runs over by ten minutes most days."
        - Summary: Daily standup consistently runs long.
     ```
 
@@ -107,7 +107,6 @@ Voting is open. Each ballot is one footer comment.
 
 - The cluster ID and theme.
 - The one-line summary.
-- The verbatim quote.
 
 Prompt for an integer between 1 and 10 — "how much do you want to discuss this in the meeting" (1 = skip, 10 = must discuss). Reject anything outside that range and ask again. Collect every rating before posting — partial ballots are not allowed.
 
