@@ -23,10 +23,14 @@ The host is also a participant: they post their own entries and ballot as commen
 
 ### 1. Resolve the Page
 
-Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host: create a page with title `Retro <YYYY-MM-DD>` and the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it. Report the URL and tell the caller to share it so each team member can run `/retro <page-url>`.
+Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host: create a page with title `Retro <YYYY-MM-DD>` and the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it. Report the URL and tell the caller to share it so each team member can run `claude "/retro <page-url>"`.
 
-```markdown
-> To participate, run `/retro <page-url>` in Claude Code.
+````markdown
+To participate, run the following in your terminal:
+
+```
+claude "/retro <page-url>"
+```
 
 # Status
 
@@ -35,7 +39,7 @@ Collect
 # Host
 
 <host> (`<accountId>`)
-```
+````
 
 ### 2. Detect Role
 
