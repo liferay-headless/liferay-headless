@@ -33,12 +33,12 @@ When the team composition changes, update this table. The skill does not infer r
 
 ### Per-Member Lookup
 
-For every roster `accountId`, run two JQL searches in parallel via `searchJiraIssuesUsingJql`:
+For every roster `accountId`, run two Jira searches in parallel:
 
-1. **Current WIP** — `assignee = <accountId> AND project = LPD AND statusCategory = "In Progress" ORDER BY updated DESC` with `maxResults=5`.
-1. **Recently closed** — `assignee = <accountId> AND project = LPD AND statusCategory = Done ORDER BY resolved DESC` with `maxResults=3`.
+1. **Current WIP** — `assignee = <accountId> AND project = LPD AND statusCategory = "In Progress" ORDER BY updated DESC`, top 5 results.
+1. **Recently closed** — `assignee = <accountId> AND project = LPD AND statusCategory = Done ORDER BY resolved DESC`, top 3 results.
 
-Request the fields `summary`, `status`, `issuetype`, `updated`, `resolutiondate`. Wrap account IDs that contain `:` in double quotes inside the JQL string.
+Pull the `summary`, `status`, `issuetype`, `updated`, and `resolutiondate` fields. Wrap account IDs that contain `:` in double quotes inside the query.
 
 ## Expected Output
 
