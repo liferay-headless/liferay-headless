@@ -46,6 +46,10 @@ For every Headless `accountId` extracted from the page, run two JQL searches in 
 
 Request the fields `summary`, `status`, `issuetype`, `updated`, `resolutiondate`. Wrap account IDs that contain `:` in double quotes inside the JQL string.
 
+The user owning this skill is also a participant; include them in the rotation.
+
+## Expected Output
+
 ### Picking the Demo Pair
 
 For each member, pick one **current** ticket and one **fallback**:
@@ -54,9 +58,7 @@ For each member, pick one **current** ticket and one **fallback**:
 - **Fallback**: the most recently resolved parent Story/Task/Bug, again skipping the Technical Task subtask duplicates. Recently closed feature work outranks old test fixes.
 - **No active WIP**: members with zero In Progress tickets get a single `Demo:` line pointing at the freshest closed item, optionally with a second `Or:` line for an alternative.
 
-The user owning this skill is also a participant; include them in the rotation.
-
-## Expected Output
+### Message Format
 
 A single Slack-ready message, copied to the clipboard so the host can paste it into the team channel. Do not post it from the skill — the host owns the announcement.
 
