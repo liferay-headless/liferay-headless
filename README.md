@@ -7,17 +7,17 @@ Pull requests for code affecting headless infrastructure / data integration / st
 - **Install Claude Code skills**:
 
     ```bash
-    curl -sSL https://raw.githubusercontent.com/liferay-headless/liferay-headless/main/scripts/skills_install.sh | sh
+    curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/skills_install.sh?ref=main" | sh
     ```
 
 - **Uninstall Claude Code skills**:
 
     ```bash
-    curl -sSL https://raw.githubusercontent.com/liferay-headless/liferay-headless/main/scripts/skills_uninstall.sh | sh
+    curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/skills_uninstall.sh?ref=main" | sh
     ```
 
 - **Launch liferay.com locally**:
 
     ```bash
-    curl -sSL https://raw.githubusercontent.com/liferay-headless/liferay-headless/main/scripts/liferay.com.sh | bash
+    curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/liferay.com.sh?ref=main" | bash
     ```

@@ -29,7 +29,7 @@ Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes
 To participate, run the following in your terminal:
 
 ```
-sh -c "$(curl -sSL https://raw.githubusercontent.com/liferay-headless/liferay-headless/main/scripts/skills_install.sh)"
+sh -c "$(curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/skills_install.sh?ref=main")"
 claude mcp add --transport http Atlassian https://mcp.atlassian.com/v1/mcp/authv2
 claude "/retro <page-url>"
 ```
