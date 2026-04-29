@@ -53,8 +53,6 @@ A Slack-ready message copied to the clipboard. Do not post it from the skill —
 The message has this exact shape:
 
 ```
-*Headless Demo — Monday*
-
 • @<slack-handle>
     ◦ Current: https://liferay.atlassian.net/browse/LPD-XXXXX — <summary>
     ◦ Fallback: https://liferay.atlassian.net/browse/LPD-YYYYY — <summary>
@@ -64,7 +62,6 @@ The message has this exact shape:
 
 Each element is determined by:
 
-- **Title**: literal `*Headless Demo — Monday*`. Single asterisks for bold (Slack mrkdwn).
 - **Outer bullet** (`•`): one per Confluence-page row, in page order. `<slack-handle>` is the exact value from the Member Roster table for that row's `accountId` — never derive it from the Jira display name.
 - **Inner bullets** (`◦`, four-space indent): one or two per member, picked from that member's Jira query results.
     - `Current: <url> — <summary>` — the parent Story/Task/Bug with the most recent `updated` timestamp from the **Current WIP** query. Skip Technical Task subtasks unless they're the only signal of progress, in which case use the parent Story's URL with the subtask's summary. Deprioritize Investigate / Poshi / flaky-test tickets — surface them only when nothing more substantive is open.
