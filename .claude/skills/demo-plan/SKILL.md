@@ -1,25 +1,19 @@
 ---
 
-description: Build the weekly Headless team demo plan by reading the Work in Progress Confluence page, picking a current and a fallback ticket per member, and producing a Slack-ready announcement.
+description: Build the weekly Headless team demo plan by picking a current and a fallback ticket per member from Jira and producing a Slack-ready announcement.
 name: demo-plan
 
 ---
 
 # Demo Plan
 
-Each Monday the daily is replaced by a team demo. Every team member shows the work they currently own (or, if it is too early, the most recent piece they wrapped up). This skill produces the weekly announcement: it reads the canonical Work in Progress Confluence page, queries each member's open and recently closed Jira tickets, and emits a Slack-ready message that the host can paste into the team channel.
+Each Monday the daily is replaced by a team demo. Every team member shows the work they currently own (or, if it is too early, the most recent piece they wrapped up). This skill produces the weekly announcement: it queries each member's open and recently closed Jira tickets and emits a Slack-ready message that the host can paste into the team channel.
 
 ## Input
 
-The Work in Progress Confluence page for the Headless team:
-
-`https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/2825027601/Work+in+progress`
-
-Fetch it with `getConfluencePage` using `cloudId=liferay.atlassian.net` and the ADF body (default). The Engineering row at the top (Brian Chan, manager) is **not** part of the demo rotation — skip it. Every row under the **Headless** header maps to one demo slot. Each row contains the member's profile picture macro (carries the `accountId`) and a `blockCard` whose JQL identifies their active filter.
-
 ### Member Roster
 
-The Slack handles below do not always match the Jira display name (Slack handles use first names, nicknames, or email-style logins). Use this exact mapping when emitting the message — never invent a handle from the Jira name alone. Order matches the Confluence page rows.
+The roster below is the source of truth for who demos each week and how to address them. The Slack handles do not always match the Jira display name (Slack handles use first names, nicknames, or email-style logins). Use this exact mapping when emitting the message — never invent a handle from the Jira name alone. The bullets in the output are in this order.
 
 | Jira name             | Account ID                                     | Slack handle           |
 | --------------------- | ---------------------------------------------- | ---------------------- |
@@ -35,11 +29,11 @@ The Slack handles below do not always match the Jira display name (Slack handles
 | Petteri Karttunen     | `557058:09ff46ee-56b3-491b-9454-4540bf458976`  | `@Petteri Karttunen`   |
 | Jose Luis Navarro     | `712020:2de6b052-0fdc-4f34-8b53-9bede77e739d`  | `@joseluis.navarro`    |
 
-If a new member appears on the Confluence page that is not in the table, ask the caller for the correct Slack handle before emitting the message.
+When the team composition changes, update this table. The skill does not infer roster changes from any external source.
 
 ### Per-Member Lookup
 
-For every Headless `accountId` extracted from the page, run two JQL searches in parallel via `searchJiraIssuesUsingJql`:
+For every roster `accountId`, run two JQL searches in parallel via `searchJiraIssuesUsingJql`:
 
 1. **Current WIP** — `assignee = <accountId> AND project = LPD AND statusCategory = "In Progress" ORDER BY updated DESC` with `maxResults=5`.
 1. **Recently closed** — `assignee = <accountId> AND project = LPD AND statusCategory = Done ORDER BY resolved DESC` with `maxResults=3`.
@@ -60,10 +54,8 @@ The message has this exact shape:
 
 Every member gets the same two-line block — no exceptions, no alternate labels.
 
-- **Outer bullet** (`•`): one per member, in page order. `<slack-handle>` is the exact value from the Member Roster table for that member's `accountId` — never derive it from the Jira display name.
+- **Outer bullet** (`•`): one per member, in roster order. `<slack-handle>` is the exact value from the Member Roster table for that member's `accountId` — never derive it from the Jira display name.
 - **`Current:` line**: the parent Story/Task/Bug with the most recent `updated` timestamp from the **Current WIP** query. Skip Technical Task subtasks unless they're the only signal of progress, in which case use the parent Story's URL with the subtask's summary. Deprioritize Investigate / Poshi / flaky-test tickets — surface them only when nothing more substantive is open. If the member has zero In Progress tickets, pull `Current:` from the **Recently closed** query (most recent `resolved`).
 - **`Fallback:` line**: the next-most-recent parent Story/Task/Bug from the **Recently closed** query, skipping Technical Task duplicates and the ticket already used on the `Current:` line. Recently closed feature work outranks old test fixes.
 - **Links**: bare URLs, one per inner bullet. Do not use the `<url|label>` form (Slack's rich-text composer renders the pipe literally). Do not embed extra ticket links inside the summary.
 - **Summary**: the Jira `summary` field, lightly trimmed. No trailing punctuation.
-
-The user owning this skill is also a participant — emit a row for them too.
