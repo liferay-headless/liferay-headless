@@ -17,6 +17,33 @@ The Work in Progress Confluence page for the Headless team:
 
 Fetch it with `getConfluencePage` using `cloudId=liferay.atlassian.net` and the ADF body (default). The Engineering row at the top (Brian Chan, manager) is **not** part of the demo rotation — skip it. Every row under the **Headless** header maps to one demo slot. Each row contains the member's profile picture macro (carries the `accountId`) and a `blockCard` whose JQL identifies their active filter.
 
+## Expected Output
+
+A single Slack-ready message, copied to the clipboard so the host can paste it into the team channel. Do not post it from the skill — the host owns the announcement.
+
+The message uses Slack's mrkdwn dialect:
+
+- Bold via `*text*` (single asterisks).
+- Links as plain URLs — Slack will auto-link them. Do not use the `<url|label>` form: pasting it into Slack's rich-text composer surfaces the literal pipe instead of a link.
+- One link per bullet. Do not embed extra ticket links inside the summary text.
+- Nested bullets with `•` at the outer level and `◦` at the inner level (four spaces of indent).
+
+Message shape:
+
+```
+*Headless Demo — Monday*
+
+• @<member-handle>
+    ◦ Current: https://liferay.atlassian.net/browse/LPD-XXXXX — <summary>
+    ◦ Fallback: https://liferay.atlassian.net/browse/LPD-YYYYY — <summary>
+• @<member-handle>
+    ◦ Demo: https://liferay.atlassian.net/browse/LPD-ZZZZZ — <summary>
+```
+
+Use the exact Slack handle from the Member Roster table. Slack will not auto-resolve plain text handles into mentions — that's expected; the host will replace each `@handle` with a real `@mention` in the Slack composer before sending. Order the bullets to match the row order on the Confluence page.
+
+After copying, report to the caller that the clipboard now holds the message, and remind them to convert the `@handle` strings into real Slack mentions before sending.
+
 ## Member Roster
 
 The Slack handles below do not always match the Jira display name (Slack handles use first names, nicknames, or email-style logins). Use this exact mapping when emitting the message — never invent a handle from the Jira name alone. Order matches the Confluence page rows.
@@ -55,30 +82,3 @@ For each member, pick one **current** ticket and one **fallback**:
 - **No active WIP**: members with zero In Progress tickets get a single `Demo:` line pointing at the freshest closed item, optionally with a second `Or:` line for an alternative.
 
 The user owning this skill is also a participant; include them in the rotation.
-
-## Expected Output
-
-A single Slack-ready message, copied to the clipboard so the host can paste it into the team channel. Do not post it from the skill — the host owns the announcement.
-
-The message uses Slack's mrkdwn dialect:
-
-- Bold via `*text*` (single asterisks).
-- Links as plain URLs — Slack will auto-link them. Do not use the `<url|label>` form: pasting it into Slack's rich-text composer surfaces the literal pipe instead of a link.
-- One link per bullet. Do not embed extra ticket links inside the summary text.
-- Nested bullets with `•` at the outer level and `◦` at the inner level (four spaces of indent).
-
-Message shape:
-
-```
-*Headless Demo — Monday*
-
-• @<member-handle>
-    ◦ Current: https://liferay.atlassian.net/browse/LPD-XXXXX — <summary>
-    ◦ Fallback: https://liferay.atlassian.net/browse/LPD-YYYYY — <summary>
-• @<member-handle>
-    ◦ Demo: https://liferay.atlassian.net/browse/LPD-ZZZZZ — <summary>
-```
-
-Use the exact Slack handle from the Member Roster table. Slack will not auto-resolve plain text handles into mentions — that's expected; the host will replace each `@handle` with a real `@mention` in the Slack composer before sending. Order the bullets to match the row order on the Confluence page.
-
-After copying, report to the caller that the clipboard now holds the message, and remind them to convert the `@handle` strings into real Slack mentions before sending.
