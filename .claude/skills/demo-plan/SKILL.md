@@ -56,18 +56,13 @@ The message has this exact shape:
 • @<slack-handle>
     ◦ Current: https://liferay.atlassian.net/browse/LPD-XXXXX — <summary>
     ◦ Fallback: https://liferay.atlassian.net/browse/LPD-YYYYY — <summary>
-• @<slack-handle>
-    ◦ Demo: https://liferay.atlassian.net/browse/LPD-ZZZZZ — <summary>
 ```
 
-Each element is determined by:
+Every member gets the same two-line block — no exceptions, no alternate labels.
 
 - **Outer bullet** (`•`): one per Confluence-page row, in page order. `<slack-handle>` is the exact value from the Member Roster table for that row's `accountId` — never derive it from the Jira display name.
-- **Inner bullets** (`◦`, four-space indent): one or two per member, picked from that member's Jira query results.
-    - `Current: <url> — <summary>` — the parent Story/Task/Bug with the most recent `updated` timestamp from the **Current WIP** query. Skip Technical Task subtasks unless they're the only signal of progress, in which case use the parent Story's URL with the subtask's summary. Deprioritize Investigate / Poshi / flaky-test tickets — surface them only when nothing more substantive is open.
-    - `Fallback: <url> — <summary>` — the parent Story/Task/Bug with the most recent `resolved` timestamp from the **Recently closed** query, skipping Technical Task duplicates. Recently closed feature work outranks old test fixes.
-    - `Demo: <url> — <summary>` — replaces the Current/Fallback pair when the member has zero In Progress tickets. Pull from the Recently closed query.
-    - `Or: <url> — <summary>` — optional second alternative paired with `Demo:`.
+- **`Current:` line**: the parent Story/Task/Bug with the most recent `updated` timestamp from the **Current WIP** query. Skip Technical Task subtasks unless they're the only signal of progress, in which case use the parent Story's URL with the subtask's summary. Deprioritize Investigate / Poshi / flaky-test tickets — surface them only when nothing more substantive is open. If the member has zero In Progress tickets, pull `Current:` from the **Recently closed** query (most recent `resolved`).
+- **`Fallback:` line**: the next-most-recent parent Story/Task/Bug from the **Recently closed** query, skipping Technical Task duplicates and the ticket already used on the `Current:` line. Recently closed feature work outranks old test fixes.
 - **Links**: bare URLs, one per inner bullet. Do not use the `<url|label>` form (Slack's rich-text composer renders the pipe literally). Do not embed extra ticket links inside the summary.
 - **Summary**: the Jira `summary` field, lightly trimmed. No trailing punctuation.
 
