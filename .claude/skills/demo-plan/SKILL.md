@@ -46,41 +46,32 @@ For every Headless `accountId` extracted from the page, run two JQL searches in 
 
 Request the fields `summary`, `status`, `issuetype`, `updated`, `resolutiondate`. Wrap account IDs that contain `:` in double quotes inside the JQL string.
 
-The user owning this skill is also a participant; include them in the rotation.
-
 ## Expected Output
 
-### Picking the Demo Pair
+A Slack-ready message copied to the clipboard. Do not post it from the skill — the host owns the announcement. After copying, tell the caller that the clipboard holds the message and that they need to convert each `@handle` into a real Slack mention before sending.
 
-For each member, pick one **current** ticket and one **fallback**:
-
-- **Current**: prefer the parent Story/Task/Bug with the most recent `updated` timestamp. Skip Technical Task subtasks unless they carry the only signal of progress (in which case mention the parent Story alongside). Deprioritize "Investigate" / Poshi / flaky-test tickets — surface them only when nothing more substantive is open.
-- **Fallback**: the most recently resolved parent Story/Task/Bug, again skipping the Technical Task subtask duplicates. Recently closed feature work outranks old test fixes.
-- **No active WIP**: members with zero In Progress tickets get a single `Demo:` line pointing at the freshest closed item, optionally with a second `Or:` line for an alternative.
-
-### Message Format
-
-A single Slack-ready message, copied to the clipboard so the host can paste it into the team channel. Do not post it from the skill — the host owns the announcement.
-
-The message uses Slack's mrkdwn dialect:
-
-- Bold via `*text*` (single asterisks).
-- Links as plain URLs — Slack will auto-link them. Do not use the `<url|label>` form: pasting it into Slack's rich-text composer surfaces the literal pipe instead of a link.
-- One link per bullet. Do not embed extra ticket links inside the summary text.
-- Nested bullets with `•` at the outer level and `◦` at the inner level (four spaces of indent).
-
-Message shape:
+The message has this exact shape:
 
 ```
 *Headless Demo — Monday*
 
-• @<member-handle>
+• @<slack-handle>
     ◦ Current: https://liferay.atlassian.net/browse/LPD-XXXXX — <summary>
     ◦ Fallback: https://liferay.atlassian.net/browse/LPD-YYYYY — <summary>
-• @<member-handle>
+• @<slack-handle>
     ◦ Demo: https://liferay.atlassian.net/browse/LPD-ZZZZZ — <summary>
 ```
 
-Use the exact Slack handle from the Member Roster table. Slack will not auto-resolve plain text handles into mentions — that's expected; the host will replace each `@handle` with a real `@mention` in the Slack composer before sending. Order the bullets to match the row order on the Confluence page.
+Each element is determined by:
 
-After copying, report to the caller that the clipboard now holds the message, and remind them to convert the `@handle` strings into real Slack mentions before sending.
+- **Title**: literal `*Headless Demo — Monday*`. Single asterisks for bold (Slack mrkdwn).
+- **Outer bullet** (`•`): one per Confluence-page row, in page order. `<slack-handle>` is the exact value from the Member Roster table for that row's `accountId` — never derive it from the Jira display name.
+- **Inner bullets** (`◦`, four-space indent): one or two per member, picked from that member's Jira query results.
+    - `Current: <url> — <summary>` — the parent Story/Task/Bug with the most recent `updated` timestamp from the **Current WIP** query. Skip Technical Task subtasks unless they're the only signal of progress, in which case use the parent Story's URL with the subtask's summary. Deprioritize Investigate / Poshi / flaky-test tickets — surface them only when nothing more substantive is open.
+    - `Fallback: <url> — <summary>` — the parent Story/Task/Bug with the most recent `resolved` timestamp from the **Recently closed** query, skipping Technical Task duplicates. Recently closed feature work outranks old test fixes.
+    - `Demo: <url> — <summary>` — replaces the Current/Fallback pair when the member has zero In Progress tickets. Pull from the Recently closed query.
+    - `Or: <url> — <summary>` — optional second alternative paired with `Demo:`.
+- **Links**: bare URLs, one per inner bullet. Do not use the `<url|label>` form (Slack's rich-text composer renders the pipe literally). Do not embed extra ticket links inside the summary.
+- **Summary**: the Jira `summary` field, lightly trimmed. No trailing punctuation.
+
+The user owning this skill is also a participant — emit a row for them too.
