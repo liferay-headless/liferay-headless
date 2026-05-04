@@ -34,7 +34,7 @@ echo ">>> You will need 150GB of free space and around 1 hour."
 echo ">>> This is the plan:"
 echo ">>>   1. Kill Tomcat, drop the database, and delete bundles"
 echo ">>>   2. Load liferay.com database"
-echo ">>>   3. Checkout 4lejandrito/liferay.com.fixes branch and build it"
+echo ">>>   3. Checkout master branch and build it"
 echo ">>>   4. Load liferay.com bundles into it"
 echo ">>>   5. Run the database upgrade"
 echo ">>>   6. Start Tomcat"
@@ -69,11 +69,11 @@ for file in dumps/*.sql; do
   fi;
 done
 
-echo ">>> Checking out liferay.com.fixes branch..."
+echo ">>> Checking out master branch..."
 cd ../liferay-portal
 git clean -fd
 git checkout -- .
-git fetch https://github.com/4lejandrito/liferay-portal.git liferay.com.fixes
+git fetch https://github.com/liferay/liferay-portal.git master
 git checkout -f FETCH_HEAD
 
 echo ">>> Building liferay-portal..."
