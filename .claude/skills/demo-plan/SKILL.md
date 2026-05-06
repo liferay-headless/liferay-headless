@@ -11,29 +11,9 @@ Each Monday the daily is replaced by a team demo. Every team member shows the wo
 
 ## Input
 
-### Member Roster
-
-The roster below is the source of truth for who demos each week and how to address them. The Slack handles do not always match the Jira display name (Slack handles use first names, nicknames, or email-style logins). Use this exact mapping when emitting the message — never invent a handle from the Jira name alone. The bullets in the output are in this order.
-
-| Jira name             | Account ID                                     | Slack handle           |
-| --------------------- | ---------------------------------------------- | ---------------------- |
-| Alejandro Tardín      | `5ce7d3ef8fa24d0dd2de9989`                     | `@Alejandro Tardín`    |
-| Carlos Correa García  | `62050b847334070067553c44`                     | `@Carlos Correa`       |
-| Jaime León Rosado     | `633c09763ac41ebde76da845`                     | `@Jaime León Rosado`   |
-| Jorge González        | `605242d9009fee00693ade38`                     | `@boton`               |
-| Magdalena Jedraszak   | `6107dedec51f3a0069dffc8a`                     | `@Meg Jedraszak`       |
-| Vendel Töreki         | `606cbbb63e6ea00068536e7f`                     | `@Vendel Töreki`       |
-| Alberto Moreno Lage   | `64198a787222b08f3e722b76`                     | `@Alberto Moreno`      |
-| Gábor Komáromi        | `606da595edc14f00769a90f1`                     | `@Gábor Komáromi`      |
-| Daniel Raposo Sánchez | `712020:7f3f1739-bbf7-4824-9b42-7e1196684ff6`  | `@Daniel Raposo`       |
-| Petteri Karttunen     | `557058:09ff46ee-56b3-491b-9454-4540bf458976`  | `@Petteri Karttunen`   |
-| Jose Luis Navarro     | `712020:2de6b052-0fdc-4f34-8b53-9bede77e739d`  | `@joseluis.navarro`    |
-
-When the team composition changes, update this table. The skill does not infer roster changes from any external source.
-
 ### Per-Member Lookup
 
-For every roster `accountId`, run two Jira searches in parallel:
+For every team member, run two Jira searches in parallel:
 
 1. **Current WIP** — `assignee = <accountId> AND project = LPD AND statusCategory = "In Progress" ORDER BY updated DESC`, top 5 results.
 1. **Recently closed** — `assignee = <accountId> AND project = LPD AND statusCategory = Done ORDER BY resolved DESC`, top 3 results.
