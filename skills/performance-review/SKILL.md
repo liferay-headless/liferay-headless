@@ -10,6 +10,13 @@ name: performance-review
 
 Generate a short, executive-grade markdown review of one team member for one review period (one of three per year — delivered in January, May, or September, each covering the preceding four months), grounded in Jira, GitHub, and git evidence pulled directly from those systems.
 
+## References
+
+Before running, read both files — they are the source of truth for who is on the team and how to call Jira:
+
+- `../../rules/team.md` — member roster. Use this to resolve the caller's input to exactly one member and to fill the `Role` line of the output. The `### Rating calibration` section below is indexed by the role taken from this table.
+- `../../rules/jira-rest-api.md` — how to authenticate `curl` against the Jira Cloud REST API. Use `curl` for the Jira comment fetch, not the Atlassian MCP.
+
 ## Input
 
 ### Team Member

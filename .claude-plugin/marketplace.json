@@ -1,0 +1,13 @@
+{
+  "name": "liferay-headless",
+  "description": "Marketplace for the Liferay Headless team's Claude Code plugin.",
+  "owner": {
+    "name": "Liferay Headless"
+  },
+  "plugins": [
+    {
+      "name": "liferay-headless",
+      "source": "./"
+    }
+  ]
+}

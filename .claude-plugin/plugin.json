@@ -1,0 +1,7 @@
+{
+  "name": "liferay-headless",
+  "description": "Operational skills for the Liferay Headless team — demo planning, retros, PR throughput reports, performance reviews, and Intruders triage.",
+  "author": {
+    "name": "Liferay Headless"
+  }
+}

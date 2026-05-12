@@ -4,7 +4,7 @@ argument-hint: "[confluence-page-url]"
 description: Run a remote retrospective backed by a Confluence page. Loads the page, detects its phase (collect, vote, discuss), and directs the user to the next action — collect entries, cluster and prioritize them, gather votes, or present the discussion agenda.
 name: retro
 allowed-tools:
-  - mcp__claude_ai_Atlassian__*
+  - mcp__Atlassian__*
 
 ---
 
@@ -28,9 +28,10 @@ Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes
 ````markdown
 To participate, run the following in your terminal:
 
-```
-sh -c "$(curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/skills_install.sh?ref=main")"
-claude mcp add --transport http Atlassian https://mcp.atlassian.com/v1/mcp/authv2
+```bash
+claude plugin marketplace add liferay-headless/liferay-headless
+claude plugin install liferay-headless@liferay-headless
+claude plugin update liferay-headless@liferay-headless
 claude "/retro <page-url>"
 ```
 

@@ -9,6 +9,13 @@ name: demo-plan
 
 Each Monday the daily is replaced by a team demo. Every team member shows the work they currently own (or, if it is too early, the most recent piece they wrapped up). This skill produces the weekly announcement: it queries each member's open and recently closed Jira tickets and emits a Slack-ready message that the host can paste into the team channel.
 
+## References
+
+Before running, read both files — they are the source of truth for who is on the team and how to call Jira:
+
+- `../../rules/team.md` — member roster (Jira account IDs, Slack handles, GitHub handles). The Per-Member Lookup below iterates this table; the Slack handle on each outer bullet comes verbatim from this file.
+- `../../rules/jira-rest-api.md` — how to authenticate `curl` against the Jira Cloud REST API. All Jira queries below go through `curl`, never through the Atlassian MCP.
+
 ## Input
 
 ### Per-Member Lookup
