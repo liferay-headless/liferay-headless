@@ -146,7 +146,7 @@ After posting, tell the caller their vote is recorded and to send any message to
     1. `Frequency × Severity`, descending.
     1. Cluster ID, ascending.
 
-1. Cap at the top three. Build the `# Agenda` section as a ranked list with average rating, the champion as opener, and a discussion prompt:
+1. Build the `# Agenda` section as a ranked list of every cluster with average rating, the champion as opener, and a discussion prompt:
 
     ```markdown
     # Agenda
