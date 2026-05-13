@@ -25,11 +25,13 @@ Open every invocation with one short joke (one or two lines) about software deve
 
 ### 1. Resolve the Page
 
-Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host:
+Accept a page URL from `${ARGUMENTS}`. When none is supplied, find the latest retro and decide whether to reuse it or create the next one.
 
-1. Find the next retro number `N`. Run `searchConfluenceUsingCql` with `title ~ "Retro"` to list existing retro pages, parse titles matching `Retro <integer>`, and set `N = max(found) + 1`. If none exist, `N = 1`.
-1. Determine the target space/parent: reuse the location of the most recent existing `Retro <N>` page when one exists; otherwise ask the host which space to create it in.
-1. Create a page with title `Retro <N>` and the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it. Report the URL and tell the caller to share it so each team member can run `claude "/retro <page-url>"`.
+Run `searchConfluenceUsingCql` with `space = "ENGHEADLESS" AND parent = "2151056423" AND title ~ "Retro"` to list pages under `Retrospectives`, parse titles matching `Retro <integer>`, and pick the highest number `M`.
+
+If a `Retro <M>` exists and its `# Status` is `Collect` or `Vote`, the retro is still in progress — use it.
+
+Otherwise create `Retro <N>` (where `N = M + 1`, or `N = 0` when no retro exists) in that same `Retrospectives` folder with the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it.
 
 ````markdown
 To participate, run the following in your terminal:
