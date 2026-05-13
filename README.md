@@ -25,6 +25,15 @@ To uninstall:
 claude plugin marketplace remove liferay-headless
 ```
 
+#### Testing local changes
+
+To try out unreleased changes, install the plugin from your local clone instead of GitHub:
+
+```bash
+claude plugin marketplace add /path/to/liferay-headless
+claude plugin install liferay-headless@liferay-headless
+```
+
 ### Scripts
 
 - **Launch liferay.com locally**:
