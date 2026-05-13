@@ -23,7 +23,11 @@ The host is also a participant: they post their own entries and ballot as commen
 
 ### 1. Resolve the Page
 
-Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host: create a page with title `Retro <YYYY-MM-DD>` and the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it. Report the URL and tell the caller to share it so each team member can run `claude "/retro <page-url>"`.
+Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host:
+
+1. Find the next retro number `N`. Run `searchConfluenceUsingCql` with `title ~ "Retro"` to list existing retro pages, parse titles matching `Retro <integer>`, and set `N = max(found) + 1`. If none exist, `N = 1`.
+1. Determine the target space/parent: reuse the location of the most recent existing `Retro <N>` page when one exists; otherwise ask the host which space to create it in.
+1. Create a page with title `Retro <N>` and the body below, where `<host>` is the caller's `name` from `atlassianUserInfo` and `<accountId>` is the caller's `account_id`. Read the page URL from the create response, then update the body to replace `<page-url>` with it. Report the URL and tell the caller to share it so each team member can run `claude "/retro <page-url>"`.
 
 ````markdown
 To participate, run the following in your terminal:
@@ -79,6 +83,8 @@ After posting, tell the caller their entries are recorded and to send any messag
     1. Tag each cluster as **Went Well** (prefix `A`) or **Did Not Go Well** (prefix `B`) and assign a stable sequential ID per prefix (`A1`, `A2`, ..., `B1`, `B2`, ...). IDs must not change once published — they anchor voting and ranking.
     1. Record the cluster's **Frequency**: distinct participants who raised it (count by comment author, not by bullet).
     1. Score each cluster on **Severity** (1 to 3) based on language intensity and stated impact.
+    1. Assign a **Champion**: the participant whose thought best captures the cluster's theme. If multiple thoughts are equally representative, pick the one with the most concrete detail or strongest stated impact. The champion opens the cluster's discussion in the meeting.
+    1. **Enumerate every thought** in the cluster verbatim under `Thoughts`. Preserve original wording exactly. Do not attribute thoughts to authors in the list.
 
     The `# Analysis` section format:
 
@@ -87,16 +93,25 @@ After posting, tell the caller their entries are recorded and to send any messag
 
     ## Went Well
 
-    1. **A1 — Faster CI**: 1 participant, severity 2.
+    1. **A1 — Faster CI**
+       - Frequency: 2.
+       - Severity: 2.
+       - Champion: Jane Doe.
        - Summary: CI changes delivered measurable speedups.
+       - Thoughts:
+         - "CI is way faster after the cache tweaks."
+         - "PR builds went from 12 to 4 minutes."
 
     ## Did Not Go Well
 
-    1. **B1 — Standup Overruns**: 1 participant, severity 2.
+    1. **B1 — Standup Overruns**
+       - Frequency: 1.
+       - Severity: 2.
+       - Champion: Carol King.
        - Summary: Daily standup consistently runs long.
+       - Thoughts:
+         - "Standup runs over by ten minutes most days."
     ```
-
-    Ignore caller identity in the output — analysis is about themes, not people.
 
 1. Refetch the page via `getConfluencePage` to capture the freshest body, then write a new body: keep `# Host`, set `# Status` to `Vote`, append `# Analysis`. Then continue to the Vote phase.
 
@@ -131,18 +146,26 @@ After posting, tell the caller their vote is recorded and to send any message to
     1. `Frequency × Severity`, descending.
     1. Cluster ID, ascending.
 
-1. Cap at the top three. Build the `# Agenda` section as a ranked list with average rating in brackets and a discussion prompt:
+1. Cap at the top three. Build the `# Agenda` section as a ranked list with average rating, the champion as opener, and a discussion prompt:
 
     ```markdown
     # Agenda
 
-    1. **B1 — Standup Overruns** (avg 7.0) — What format keeps standup at fifteen minutes?
+    1. **B1 — Standup Overruns** (avg 7.0) — Champion: Carol King opens. What format keeps standup at fifteen minutes?
 
-    1. **A1 — Faster CI** (avg 6.5) — What's the next bottleneck to attack?
+    1. **A1 — Faster CI** (avg 6.5) — Champion: Jane Doe opens. What's the next bottleneck to attack?
     ```
 
 1. Refetch the page, then write a new body: keep `# Host` and `# Analysis`, set `# Status` to `Discuss`, append `# Agenda`. Then continue to the Discuss phase.
 
 #### 3. Discuss
 
-The agenda is published and the meeting is ready. Take no action — the page is read-only by convention once `Status` is `Discuss`.
+The agenda is published and the meeting is ready. For each item in order, the listed champion opens the discussion with their thought; the team then debates. The page is read-only by convention once `Status` is `Discuss`.
+
+**Host (finish).** When the host replies `finish`, open the next retro page so thoughts can start accumulating immediately:
+
+1. Read the current page's title to extract its number `N` (e.g. `Retro 7` → `N = 7`).
+1. Create a new page titled `Retro <N+1>` in the same space and parent as the current page, with the standard Collect body from step 1 (using the current host's identity in `# Host`). Replace `<page-url>` in the body with the new page's URL.
+1. Report the new URL and tell the host to share it with the team.
+
+Participants who reply `finish` are told only the host can close the retro.
