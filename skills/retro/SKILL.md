@@ -21,6 +21,8 @@ The host is also a participant: they post their own entries and ballot as commen
 
 ## Workflow
 
+Open every invocation with one short joke (one or two lines) about software development, productivity, remote work, debugging, or related dev-life topics. Pick a fresh joke each call — don't repeat the same joke on the same page. Then proceed.
+
 ### 1. Resolve the Page
 
 Accept a page URL from `${ARGUMENTS}`. When none is supplied, the caller becomes the host:
