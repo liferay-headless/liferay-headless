@@ -25,9 +25,9 @@ Number of trailing weeks to enumerate as a nested list. Second positional in `${
 
 ## Procedure
 
-Anchor the buckets at **today (UTC)**. The most recent bucket is `[today - 7d, today)`, the one before it is `[today - 14d, today - 7d)`, and so on. Bucket boundaries are date-based, not ISO-week-aligned, so "the last N weeks" stays stable regardless of weekday.
+Use **natural ISO weeks** (Monday 00:00 UTC → next Monday 00:00 UTC). The current bucket is the ISO week containing today (partial, still in progress). The bucket before it is the previous Mon→Mon window, and so on for `<weeks>` total buckets. Bucket boundaries are calendar-aligned, not relative to today.
 
-1. **Fetch** every PR with `createdAt >= today - <weeks> * 7d` from `liferay-headless/liferay-portal` via the GitHub CLI:
+1. **Fetch** every PR with `createdAt >= <since>` from `liferay-headless/liferay-portal` via the GitHub CLI:
 
 	```bash
 	gh pr list \
@@ -38,9 +38,9 @@ Anchor the buckets at **today (UTC)**. The most recent bucket is `[today - 7d, t
 		--json number,createdAt,title,author,url
 	```
 
-	`<since>` is `today - <weeks> * 7d` formatted as `YYYY-MM-DD`. `--state all` is mandatory — open and closed PRs both count.
+	`<since>` is the Monday (UTC) that starts the oldest bucket, formatted as `YYYY-MM-DD`. Compute it as `monday_of_this_week - (<weeks> - 1) * 7d`, where `monday_of_this_week` is the most recent Monday ≤ today (UTC). `--state all` is mandatory — open and closed PRs both count.
 
-1. **Bucket** each PR by `createdAt` into one of `<weeks>` half-open windows `[start, end)` ending at today. PRs created on today fall outside the trailing window and are dropped.
+1. **Bucket** each PR by `createdAt` into one of `<weeks>` half-open windows `[Monday, next Monday)`. The newest bucket is the ISO week containing today and may be partial.
 
 1. **Render the chart**, oldest → newest, in a fenced block with this exact shape:
 
@@ -54,9 +54,10 @@ Anchor the buckets at **today (UTC)**. The most recent bucket is `[today - 7d, t
 	```
 	````
 
-	- Label is the bucket's start date (`YYYY-MM-DD`).
+	- Label is the bucket's Monday (`YYYY-MM-DD`).
 	- Bar length is `round(count / max * 40)` cells of `█`.
 	- Pad the bar field to 40 cells with trailing spaces so the count column lines up.
+	- The newest bucket may be a partial week (Monday → today). Render it with the same scaling; do not normalize.
 
 1. **Render the list** for the most recent `<list-weeks>` buckets, oldest → newest, as a top-level nested Markdown list:
 
@@ -66,7 +67,7 @@ Anchor the buckets at **today (UTC)**. The most recent bucket is `[today - 7d, t
 	  ...
 	```
 
-	- Outer label spans the bucket's start date (inclusive) and end date (inclusive: `end - 1d`).
+	- Outer label spans the bucket's Monday (inclusive) and the following Sunday (inclusive: `Monday + 6d`).
 	- Inner items are sorted by `createdAt` ascending.
 	- `<brief>` is the PR title with leading `LPD-NNNNN` ticket chains and leading separators (`|`, `:`, `-`) stripped, then trimmed. Preserve the rest verbatim — do not paraphrase or shorten.
 
