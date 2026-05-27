@@ -27,10 +27,10 @@ claude plugin marketplace remove liferay-headless
 
 #### Testing local changes
 
-To try out unreleased changes, install the plugin from your local clone instead of GitHub:
+To try out unreleased changes, install the plugin from your local clone instead of GitHub. `cd` to the `liferay-headless` repo and then run:
 
 ```bash
-claude plugin marketplace add /path/to/liferay-headless
+claude plugin marketplace add ./
 claude plugin install liferay-headless@liferay-headless
 ```
 
