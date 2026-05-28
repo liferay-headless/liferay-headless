@@ -1,6 +1,6 @@
 # Fetch Failure Data From Testray
 
-Pull a single Testray case result through the REST API at `https://testray.liferay.com`. The caller supplies a positive integer case result ID, a test name, or a Testray build URL as `${ARGUMENTS}`.
+Pull a single Testray case result through the REST API at `https://testray.liferay.com`. The caller supplies a positive integer case result ID, a routine name, a test name, or a Testray build URL as `${ARGUMENTS}`.
 
 ## Preconditions
 
@@ -59,6 +59,41 @@ Skip when the input is not a test name. Otherwise, resolve the name through the 
 	```
 
 	For each item in order, fetch its build (`/o/c/builds/<buildId>`) and read `r_routineToBuilds_c_routineId`. Return the `id` of the first case result whose build routine matches the team routine ID and whose `dueStatus.key` is not `UNTESTED`. The result may be `PASSED` — that is correct when the test currently passes on the team routine. When the loop ends without a match, abort.
+
+## Resolve a Routine Name to a Case Result ID
+
+Skip when the input is not a routine name. Otherwise, find the latest build of that team routine on the master project and pick the first unclaimed failure.
+
+1. Normalize the input by stripping a leading `[master] ` when present. The result is the canonical routine name (e.g. `ci:test:headless`), to which `[master]` is reapplied when querying.
+
+1. Resolve the routine ID on the master project (`35392`). When zero matches, abort:
+
+	```bash
+	curl \
+		--data-urlencode "filter=name eq '[master] <routineName>' and r_routineToProjects_c_projectId eq '35392'" \
+		--data-urlencode "pageSize=1" \
+		--get \
+		--header "Accept: application/json" \
+		--header "Authorization: Bearer ${ACCESS_TOKEN}" \
+		--silent \
+		--url "https://testray.liferay.com/o/c/routines"
+	```
+
+1. Resolve the latest build for that routine. When no build exists, abort:
+
+	```bash
+	curl \
+		--data-urlencode "filter=r_routineToBuilds_c_routineId eq '<routineId>'" \
+		--data-urlencode "pageSize=1" \
+		--data-urlencode "sort=dateCreated:desc" \
+		--get \
+		--header "Accept: application/json" \
+		--header "Authorization: Bearer ${ACCESS_TOKEN}" \
+		--silent \
+		--url "https://testray.liferay.com/o/c/builds"
+	```
+
+1. Continue with the resulting `<buildId>` through [Resolve a Build URL to a Case Result ID](#resolve-a-build-url-to-a-case-result-id), treating `<teamIds>` as empty (the routine itself is already the team scope).
 
 ## Resolve a Build URL to a Case Result ID
 

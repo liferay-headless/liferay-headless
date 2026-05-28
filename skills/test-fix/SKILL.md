@@ -1,7 +1,7 @@
 ---
 
 allowed-tools: [Bash, Edit, Glob, Grep, Read, Skill, Write]
-argument-hint: '<caseResultId | testName | testrayBuildUrl>'
+argument-hint: '<caseResultId | routineName | testName | testrayBuildUrl>'
 description: Resolve a single Liferay test failure end-to-end.
 name: test-fix
 
@@ -24,6 +24,10 @@ When `${ARGUMENTS}` is a positive integer, use it directly as the Testray case r
 ### Testray Build URL
 
 When `${ARGUMENTS}` is a URL of the form `https://testray.liferay.com/#/project/<projectId>/routines/<routineId>/build/<buildId>?filter=<urlencoded-json>`, resolve it to a case result ID by following [`references/testray.md`](references/testray.md). The procedure returns a case result ID that the rest of the workflow consumes identically to a user-supplied one.
+
+### Routine Name
+
+When `${ARGUMENTS}` matches `ci:test:<team>` or `[master] ci:test:<team>`, resolve it to a case result ID by following [`references/testray.md`](references/testray.md). The procedure finds the latest build of that team routine on the master project and returns the first unclaimed failed case result on the build.
 
 ### Test Name
 
