@@ -125,6 +125,11 @@ Commit `<short-sha>` ("<subject>") <one or two sentences>.
 
 ### Claim the Failure
 
+1. Acquire a Confluence-backed lock that fences the critical section where two agents could race to create the Jira ticket. Create a page titled `<test-name>` under the [Test Fix Claims folder](https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/folder/4939415561). Confluence enforces unique titles within a space, so page creation is the atomic primitive — only one creation succeeds. The Jira ticket is the durable claim; the lock only protects the window leading to its creation. Drive the page create and delete through the Confluence Cloud REST API with `curl` (same auth as [`../../rules/jira-rest-api.md`](../../rules/jira-rest-api.md)), never through the Atlassian MCP.
+
+	- **Creation succeeds** → lock acquired. You are responsible for releasing it (deleting the page) — either after creating the ticket, or after deciding to skip the candidate.
+	- **Creation fails with a duplicate-title error** → the test is already claimed by another agent. Skip this candidate.
+
 1. Check Jira for an LPD ticket whose summary contains `<test-name>` and is labeled `claude-test-fix`. Decide whether it already covers this failure by its state:
 
 	- **Unresolved** (Open, In Progress, or any non-resolved state) → claimed, skip. Someone is already working it.
