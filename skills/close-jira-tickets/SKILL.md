@@ -28,6 +28,20 @@ The PR URL lives in the **Git Pull Request** field (`customfield_10201`). A
 `subtasks` and `issuetype`, then grep `brian/master` for the ID of whichever
 ticket actually holds the work.
 
+### Resolve the Real `brianchandotcom` PR
+
+The **Git Pull Request** field often points at a personal or team fork PR (e.g.
+`liferay-headless/liferay-portal`), not the `brianchandotcom/liferay-portal` PR
+that actually forwards to master. The fork PR is not evidence on its own.
+
+When the field PR is not a `brianchandotcom/liferay-portal` PR, find the real
+brian PR in the **fork PR's GitHub comments**: the CI forwarding bot posts the
+`brianchandotcom/liferay-portal/pull/<n>` link there. Read the fork PR's body
+and comments and pull that link out.
+
+Always report the resolved `brianchandotcom` PR as the evidence, never the fork
+PR. If the field already points at a `brianchandotcom` PR, use it directly.
+
 ## Close the Ticket
 
 Transition IDs and screen fields vary by issue type and current status, so never
@@ -43,7 +57,8 @@ confirmation before transitioning anything. For each ticket show:
 
 - the **title**,
 - the **Jira link** (`https://liferay.atlassian.net/browse/<KEY>`), and
-- the **PR link** (from the **Git Pull Request** field).
+- the **PR link** — the resolved `brianchandotcom/liferay-portal` PR (see
+  *Resolve the Real `brianchandotcom` PR*), not the fork PR from the field.
 
 Do not transition any ticket until the user confirms. If the user drops some
 tickets from the list, close only the ones they keep.
