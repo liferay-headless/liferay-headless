@@ -84,6 +84,12 @@ A parent **Task** exposes the **Closed** transition only once every Technical
 Task subtask is already Closed. Close the subtasks first, then refetch the
 parent's transitions and close it.
 
+### Stories Are Closed by Product Managers
+
+Never close a **Story**, even when its code has merged. Close its merged
+**Technical Task** subtask, but leave the Story for the product manager. Report
+the Story as skipped.
+
 ## Verify
 
 Refetch the closed keys and confirm each reports status `Closed` with the
