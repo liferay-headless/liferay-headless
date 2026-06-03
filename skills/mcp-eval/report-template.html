@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta content="width=device-width, initial-scale=1" name="viewport" />
+<title>Liferay MCP Evaluation Report</title>
+<style>
+:root {
+	--ok: #2e7d32; --ok-bg: #e8f5e9;
+	--partial: #ef6c00; --partial-bg: #fff3e0;
+	--fail: #c62828; --fail-bg: #ffebee;
+	--ink: #1a1a1a; --muted: #5f6b7a; --line: #e3e8ef;
+	--card-bg: #ffffff; --page-bg: #f4f6f9;
+	--openapi: #1565c0; --resource-impl: #00838f; --mcp-wrapper: #6a1b9a; --external: #546e7a;
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0; background: var(--page-bg); color: var(--ink);
+	font: 17px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+header.top { background: #0b1f33; color: #fff; padding: 30px 56px; }
+header.top h1 { margin: 0 0 6px; font-size: 28px; font-weight: 650; }
+header.top .meta { color: #9fb3c8; font-size: 15px; }
+header.top .tally { margin-left: 6px; }
+header.top .tally b { color: #fff; }
+main { max-width: 1280px; margin: 0 auto; padding: 30px 32px 96px; }
+
+/* Inline emphasis shared across body text */
+.case-body strong, .happy strong { font-weight: 700; color: var(--ink); }
+.case-body code, .happy code {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em;
+	background: #eef2f7; color: #33425b; padding: 1px 6px; border-radius: 5px;
+}
+
+.case { background: var(--card-bg); border: 1px solid var(--line); border-left: 6px solid #999;
+		  border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+.case.ok { border-left-color: var(--ok); }
+.case.partial { border-left-color: var(--partial); }
+.case.fail { border-left-color: var(--fail); }
+.case-head { display: flex; align-items: center; gap: 16px; padding: 18px 24px; cursor: pointer; }
+.case-head:hover { background: #fafbfd; }
+.case-num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 15px; font-weight: 600; }
+.case-title { font-weight: 600; flex: 1; font-size: 18px; }
+.badge { font-size: 13px; font-weight: 700; letter-spacing: .03em; padding: 5px 13px; border-radius: 999px; white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.partial { background: var(--partial-bg); color: var(--partial); }
+.badge.fail { background: var(--fail-bg); color: var(--fail); }
+.issues { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.issues.exceeded { color: var(--fail); font-weight: 600; }
+.chev { color: var(--muted); transition: transform .15s; display: inline-block; }
+.collapsed > .case-head .chev,
+.collapsed > .solution-head .chev { transform: rotate(-90deg); }
+.case.collapsed .case-body { display: none; }
+.case-body { padding: 8px 24px 22px; border-top: 1px solid var(--line); }
+
+.field { margin-top: 20px; }
+.field h3 { margin: 0 0 9px; font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+/* Collapsible Steps / Defects sections */
+.field.collapsible > h3 { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; }
+.field.collapsible > h3 .chev { font-size: 11px; }
+.field.collapsed > h3 .chev { transform: rotate(-90deg); }
+.field.collapsed > .field-body { display: none; }
+/* Flow — the unified timeline of MCP interactions, results, issues, and agent responses */
+.flow { list-style: none; margin: 0; padding: 0; }
+.flow-entry { position: relative; padding: 0 0 18px 44px; }
+.flow-entry:last-child { padding-bottom: 2px; }
+.flow-marker {
+	position: absolute; left: 0; top: 1px;
+	width: 28px; height: 28px; border-radius: 50%;
+	display: flex; align-items: center; justify-content: center;
+	font-size: 13px; font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+.flow-entry:not(:last-child)::after {
+	content: ""; position: absolute; left: 13px; top: 30px; bottom: -1px; width: 2px;
+	background: var(--line);
+}
+.flow-entry.ok .flow-marker { background: var(--ok-bg); color: var(--ok); }
+.flow-entry.issue .flow-marker { background: var(--fail-bg); color: var(--fail); }
+.flow-entry.blocked .flow-marker { background: #eef2f7; color: var(--muted); }
+.flow-entry.note .flow-marker { background: #eef2f7; color: var(--muted); }
+.flow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.flow-tool {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px; font-weight: 600;
+	padding: 3px 9px; border-radius: 5px;
+}
+.flow-tool-discovery-sets { background: #f3e8ff; color: #6b21a8; }
+.flow-tool-discovery-summaries { background: #fef3c7; color: #92400e; }
+.flow-tool-discovery-schema { background: #d1fae5; color: #065f46; }
+.flow-tool-invocation { background: #e4ecf7; color: #1d4e6f; }
+.flow-pill {
+	font-size: 12px; font-weight: 700; letter-spacing: .03em;
+	padding: 2px 9px; border-radius: 999px;
+}
+.flow-pill.issue { background: var(--fail-bg); color: var(--fail); }
+.flow-pill.blocked { background: #eef2f7; color: var(--muted); }
+.flow-intent { font-weight: 600; font-size: 16px; line-height: 1.5; }
+.flow-result { color: #4a5566; font-size: 15.5px; line-height: 1.55; margin-top: 2px; }
+.flow code, .flow-intent code, .flow-result code {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; font-weight: 600;
+	background: #eef2f7; color: #33425b; padding: 1px 6px; border-radius: 5px;
+}
+
+/* Per-step request/response payloads — native <details>, collapsed by default */
+.flow-payloads { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.flow-payload {
+	border: 1px solid var(--line); border-radius: 6px;
+	overflow: hidden; background: #fcfdff;
+}
+.flow-payload summary {
+	cursor: pointer; padding: 5px 11px;
+	background: #f5f7fb; color: var(--muted);
+	font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+	font-size: 11px; list-style: none; user-select: none;
+}
+.flow-payload summary::-webkit-details-marker { display: none; }
+.flow-payload summary::before {
+	content: "▸"; display: inline-block; margin-right: 6px;
+	font-size: 10px; transition: transform .15s;
+}
+.flow-payload[open] summary::before { transform: rotate(90deg); }
+.flow-payload[open] summary { border-bottom: 1px solid var(--line); }
+.flow-payload pre {
+	margin: 0; padding: 10px 12px;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 12.5px; line-height: 1.55;
+	background: #fafbfd; overflow-x: auto;
+	max-height: 360px; overflow-y: auto;
+	white-space: pre;
+}
+.flow-payload .json-key { color: #d73a49; }
+.flow-payload .json-string { color: #032f62; }
+.flow-payload .json-number { color: #005cc5; }
+.flow-payload .json-boolean { color: #6f42c1; }
+.flow-payload .json-null { color: #6a737d; font-style: italic; }
+
+/* Defect payload — same shell as request/response, but with a typography-rich body */
+.flow-payload-defect summary { background: #fff4f3; color: var(--fail); }
+.flow-payload-defect[open] summary { border-bottom-color: #f5c6c0; }
+.flow-payload-defect summary .defect-tag {
+	display: inline-block; margin-left: 4px;
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	font-size: 11px; font-weight: 700; letter-spacing: .02em;
+	padding: 1px 7px; border-radius: 4px;
+	background: #fff; color: var(--fail);
+	text-transform: none;
+}
+.flow-payload-defect .defect-body { padding: 13px 15px 15px; background: #fff; }
+.flow-payload-defect .defect-desc { font-size: 15.5px; line-height: 1.6; color: var(--ink); }
+.flow-payload-defect .defect-desc strong { font-weight: 700; }
+.flow-payload-defect .defect-desc code {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em;
+	background: #eef2f7; color: #33425b; padding: 1px 6px; border-radius: 5px;
+}
+
+/* Solution groups — alternatives vs complementary */
+.sol-group { margin-top: 18px; }
+.sol-group-label { display: flex; align-items: baseline; gap: 8px; margin: 0 0 9px; padding-left: 2px; }
+.sol-group-label .name { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); }
+.sol-group-label .hint { font-size: 13px; color: var(--muted); }
+.solutions { display: flex; flex-direction: column; gap: 10px; }
+
+/* Solution — each its own collapsible section */
+.solution { border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: #fff; }
+.solution-head { display: flex; align-items: center; gap: 12px; padding: 13px 15px; cursor: pointer; }
+.solution-head:hover { background: #f7f9fc; }
+.solution-title { flex: 1; font-weight: 600; font-size: 16px; }
+.surface { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; font-weight: 600;
+			 padding: 3px 9px; border-radius: 5px; color: var(--muted); background: #eef2f7; white-space: nowrap; }
+.surface.openapi { color: var(--openapi); }
+.surface.resource-impl { color: var(--resource-impl); }
+.surface.mcp-wrapper { color: var(--mcp-wrapper); }
+.surface.external { color: var(--external); }
+.solution.collapsed .solution-body { display: none; }
+.solution-body { padding: 0 15px 15px; border-top: 1px solid var(--line); }
+.solution-body .detail { margin: 12px 0; font-size: 16px; }
+
+.diff { margin: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13.5px;
+		  line-height: 1.55; border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; white-space: pre; }
+.diff span { display: block; padding: 0 12px; }
+.diff .meta { color: #6a737d; background: #f6f8fa; }
+.diff .hunk { color: #005cc5; background: #f1f8ff; }
+.diff .add { color: #22863a; background: #e6ffed; }
+.diff .del { color: #b31d28; background: #ffeef0; }
+.diff .ctx { color: #24292e; }
+
+.happy { margin-top: 18px; padding: 13px 16px; background: var(--ok-bg); color: #1b5e20; border-radius: 8px; font-size: 16px; }
+
+/* Achievable — case crossed the fail threshold but still completed through the MCP */
+.achievable { margin-top: 18px; padding: 13px 16px; background: var(--partial-bg); color: #8a4b00;
+				 border-left: 4px solid var(--partial); border-radius: 8px; font-size: 16px; }
+.achievable strong { font-weight: 700; }
+.achievable code {
+	font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .9em;
+	background: #fff; color: #8a4b00; padding: 1px 6px; border-radius: 5px;
+}
+
+/* Use Case — verbatim user-supplied prompt, collapsed by default */
+.case-text {
+	white-space: pre-wrap; word-wrap: break-word;
+	font-size: 15px; line-height: 1.6; color: var(--ink);
+	background: #f7f9fc; border: 1px solid var(--line); border-radius: 8px;
+	padding: 14px 16px; max-height: 480px; overflow-y: auto;
+}
+</style>
+</head>
+
+<body>
+<header class="top">
+<h1>Liferay MCP Evaluation Report</h1>
+<div class="meta" id="report-meta"></div>
+</header>
+
+<main>
+<section id="cases"></section>
+</main>
+
+<script id="case-data" type="application/json">
+__CASE_DATA__
+</script>
+
+<script>
+(function () {
+const cases = JSON.parse(document.getElementById("case-data").textContent);
+
+function esc(s) {
+	return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function baseVerdict(v) {
+	if (v.startsWith("OK")) return "ok";
+	if (v === "PARTIAL") return "partial";
+	return "fail";
+}
+// Escape, then apply lightweight inline markup: **bold** and `code`.
+function fmt(s) {
+	return esc(s)
+	  .replace(/`([^`]+)`/g, "<code>$1</code>")
+	  .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+// A collapsible "field" section (used for Steps and Defects).
+function makeField(title, collapsible, startCollapsed) {
+	const f = document.createElement("div");
+	f.className = "field" + (collapsible ? " collapsible" : "") + (startCollapsed ? " collapsed" : "");
+	const h = document.createElement("h3");
+	if (collapsible) {
+	  h.innerHTML = `<span class="chev">▾</span>${esc(title)}`;
+	  h.addEventListener("click", () => f.classList.toggle("collapsed"));
+	} else {
+	  h.textContent = title;
+	}
+	const body = document.createElement("div");
+	body.className = "field-body";
+	f.appendChild(h);
+	f.appendChild(body);
+	return { field: f, body };
+}
+
+const tally = { ok: 0, partial: 0, fail: 0 };
+cases.forEach(c => tally[baseVerdict(c.verdict)]++);
+document.getElementById("report-meta").innerHTML =
+	cases.length + " use cases · generated " + new Date().toLocaleString() +
+	`<span class="tally"> · <b>${tally.ok}</b> OK · <b>${tally.partial}</b> partial · <b>${tally.fail}</b> fail</span>`;
+
+function renderDiff(diff) {
+	return diff.split("\n").map(line => {
+	  let cls = "ctx";
+	  if (line.startsWith("+++") || line.startsWith("---")) cls = "meta";
+	  else if (line.startsWith("@@")) cls = "hunk";
+	  else if (line.startsWith("+")) cls = "add";
+	  else if (line.startsWith("-")) cls = "del";
+	  return `<span class="${cls}">${esc(line) || "&nbsp;"}</span>`;
+	}).join("");
+}
+
+function renderSolution(s) {
+	const detail = s.detail ? `<p class="detail">${fmt(s.detail)}</p>` : "";
+	const diff = s.diff ? `<pre class="diff">${renderDiff(s.diff)}</pre>` : "";
+	const el = document.createElement("div");
+	el.className = "solution collapsed";
+	el.innerHTML =
+	  `<div class="solution-head">
+		 <span class="chev">▾</span>
+		 <span class="solution-title">${esc(s.title)}</span>
+		 <span class="surface ${esc(s.surface)}">${esc(s.surface)}</span>
+	   </div>
+	   <div class="solution-body">${detail}${diff}</div>`;
+	el.querySelector(".solution-head").addEventListener("click", () => el.classList.toggle("collapsed"));
+	return el;
+}
+
+function renderGroup(name, hint, solutions) {
+	const g = document.createElement("div");
+	g.className = "sol-group";
+	g.innerHTML = `<div class="sol-group-label"><span class="name">${esc(name)}</span>` +
+				  (hint ? `<span class="hint">${esc(hint)}</span>` : "") + `</div>`;
+	const wrap = document.createElement("div");
+	wrap.className = "solutions";
+	solutions.forEach(s => wrap.appendChild(renderSolution(s)));
+	g.appendChild(wrap);
+	return g;
+}
+
+function renderDefectPayload(d) {
+	const wrap = document.createElement("details");
+	wrap.className = "flow-payload flow-payload-defect";
+
+	const summary = document.createElement("summary");
+	summary.innerHTML = `Defect <span class="defect-tag">${esc(d.tag)}</span>`;
+	wrap.appendChild(summary);
+
+	const body = document.createElement("div");
+	body.className = "defect-body";
+	body.innerHTML = `<div class="defect-desc">${fmt(d.description)}</div>`;
+
+	const alts = d.alternatives || [];
+	const adds = d.additional || [];
+	if (alts.length > 1) body.appendChild(renderGroup("Alternative fixes", "pick one", alts));
+	else if (alts.length === 1) body.appendChild(renderGroup("Fix", "", alts));
+	if (adds.length) body.appendChild(renderGroup("Also apply", "alongside the fix above", adds));
+
+	wrap.appendChild(body);
+	return wrap;
+}
+
+// Classify the `tool` field so the flow-tool pill picks a color per category.
+function toolClass(name) {
+	if (name === "getToolSets") return "flow-tool-discovery-sets";
+	if (name === "getToolSummaries") return "flow-tool-discovery-summaries";
+	if (name === "getTool") return "flow-tool-discovery-schema";
+	return "flow-tool-invocation";
+}
+
+// Lightweight JSON syntax highlighter — runs on the HTML-escaped string.
+function highlightJSON(escapedJson) {
+	return escapedJson.replace(
+	  /("(?:\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g,
+	  (match, stringTok, colonTok, keywordTok, numberTok) => {
+		if (stringTok !== undefined) {
+		  const cls = colonTok ? "json-key" : "json-string";
+		  return `<span class="${cls}">${stringTok}</span>${colonTok || ""}`;
+		}
+		if (keywordTok !== undefined) {
+		  const cls = keywordTok === "null" ? "json-null" : "json-boolean";
+		  return `<span class="${cls}">${keywordTok}</span>`;
+		}
+		return `<span class="json-number">${numberTok}</span>`;
+	  }
+	);
+}
+
+function renderPayload(label, content) {
+	let formatted;
+	let isJSON = true;
+	if (typeof content === "string") {
+	  try {
+		formatted = JSON.stringify(JSON.parse(content), null, 2);
+	  } catch (e) {
+		formatted = content;
+		isJSON = false;
+	  }
+	} else {
+	  formatted = JSON.stringify(content, null, 2);
+	}
+	const escaped = esc(formatted);
+	const body = isJSON ? highlightJSON(escaped) : escaped;
+	return `<details class="flow-payload"><summary>${esc(label)}</summary><pre>${body}</pre></details>`;
+}
+
+function renderFlowEntry(entry, issueIndex) {
+	const outcome = entry.outcome || "note";
+	let marker;
+	if (outcome === "ok") marker = "✓";
+	else if (outcome === "issue") marker = String(issueIndex);
+	else if (outcome === "blocked") marker = "−";
+	else marker = "•";
+
+	const pieces = [];
+	if (entry.tool) pieces.push(`<span class="flow-tool ${toolClass(entry.tool)}">${esc(entry.tool)}</span>`);
+	if (outcome === "issue") pieces.push(`<span class="flow-pill issue">Issue ${issueIndex}</span>`);
+	else if (outcome === "blocked") pieces.push(`<span class="flow-pill blocked">Blocked</span>`);
+
+	const head = pieces.length ? `<div class="flow-head">${pieces.join("")}</div>` : "";
+	const intent = entry.intent ? `<div class="flow-intent">${fmt(entry.intent)}</div>` : "";
+	const result = entry.result ? `<div class="flow-result">${fmt(entry.result)}</div>` : "";
+
+	const li = document.createElement("li");
+	li.className = "flow-entry " + outcome;
+	li.innerHTML = `<div class="flow-marker">${marker}</div>${head}${intent}${result}`;
+
+	// Payloads — Request, Response, Defect (each its own collapsed details block).
+	const hasRequest = entry.request !== undefined && entry.request !== null;
+	const hasResponse = entry.response !== undefined && entry.response !== null;
+	const hasDefect = !!entry.defect;
+	if (hasRequest || hasResponse || hasDefect) {
+	  const wrap = document.createElement("div");
+	  wrap.className = "flow-payloads";
+	  if (hasRequest) wrap.insertAdjacentHTML("beforeend", renderPayload("Request", entry.request));
+	  if (hasResponse) wrap.insertAdjacentHTML("beforeend", renderPayload("Response", entry.response));
+	  if (hasDefect) wrap.appendChild(renderDefectPayload(entry.defect));
+	  li.appendChild(wrap);
+	}
+
+	return li;
+}
+
+function renderCase(c) {
+	const bv = baseVerdict(c.verdict);
+
+	const el = document.createElement("div");
+	el.className = "case " + bv + " collapsed";
+	const overThreshold = c.issuesUsed > c.issuesMax;
+	const issuesText = overThreshold
+	  ? `${c.issuesUsed}/${c.issuesMax} issues · over threshold`
+	  : `${c.issuesUsed}/${c.issuesMax} issues`;
+	const issuesClass = overThreshold ? "issues exceeded" : "issues";
+	el.innerHTML =
+	  `<div class="case-head">
+		 <span class="chev">▾</span>
+		 <span class="case-num">#${c.caseNumber}</span>
+		 <span class="case-title">${esc(c.title)}</span>
+		 <span class="${issuesClass}">${issuesText}</span>
+		 <span class="badge ${bv}">${esc(c.verdict)}</span>
+	   </div>
+	   <div class="case-body"></div>`;
+	const cbody = el.querySelector(".case-body");
+
+	// Use Case — verbatim user-supplied prompt, collapsible and collapsed by default.
+	if (c.caseText) {
+	  const caseTextField = makeField("Use Case", true, true);
+	  caseTextField.body.innerHTML = `<div class="case-text">${esc(c.caseText)}</div>`;
+	  cbody.appendChild(caseTextField.field);
+	}
+
+	// Flow — unified timeline of tools, results, issues, and agent responses. Always shown.
+	if (c.flow && c.flow.length) {
+	  const flowField = makeField("Flow", false, false);
+	  const ul = document.createElement("ul");
+	  ul.className = "flow";
+	  let issueIndex = 0;
+	  c.flow.forEach(entry => {
+		if (entry.outcome === "issue") issueIndex++;
+		ul.appendChild(renderFlowEntry(entry, issueIndex));
+	  });
+	  flowField.body.appendChild(ul);
+	  cbody.appendChild(flowField.field);
+	}
+
+	// Happy-path note — shown only when no flow entry carried a defect.
+	const anyDefect = (c.flow || []).some(e => e && e.defect);
+	if (!anyDefect && c.happyPathNote) {
+	  const happy = document.createElement("div");
+	  happy.className = "happy";
+	  happy.innerHTML = fmt(c.happyPathNote);
+	  cbody.appendChild(happy);
+	}
+
+	// Achievable note — case crossed the fail threshold but still completed through the MCP.
+	if (c.achievable) {
+	  const achievable = document.createElement("div");
+	  achievable.className = "achievable";
+	  achievable.innerHTML = fmt(c.achievable);
+	  cbody.appendChild(achievable);
+	}
+
+	el.querySelector(".case-head").addEventListener("click", () => el.classList.toggle("collapsed"));
+	return el;
+}
+
+const container = document.getElementById("cases");
+cases.forEach(c => container.appendChild(renderCase(c)));
+})();
+</script>
+</body>
+</html>
