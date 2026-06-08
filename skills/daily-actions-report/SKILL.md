@@ -2,7 +2,7 @@
 
 allowed-tools: [Bash, Read, Write, mcp__373e0a15-d392-4d06-83a8-e087f4fce44f__searchJiraIssuesUsingJql, mcp__373e0a15-d392-4d06-83a8-e087f4fce44f__getJiraIssue, mcp__373e0a15-d392-4d06-83a8-e087f4fce44f__getConfluencePage, mcp__Claude_in_Chrome__navigate, mcp__Claude_in_Chrome__get_page_text, mcp__Claude_in_Chrome__javascript_tool, mcp__Claude_in_Chrome__computer]
 description: Generates and publishes the Headless team’s Daily Actions Report. Use this skill whenever the user asks to run, generate, build, or publish the daily actions report, the headless report, or mentions headless_daily_report.py.
-name: headless-daily-actions-report
+name: daily-actions-report
 
 ---
 
@@ -28,7 +28,7 @@ GITHUB_TOKEN=your_github_token
 ## Preconditions
 
 - `SKILL_DIR/headless_daily_report.py` exists
-- `SKILL_DIR/headless-daily-actions-report/project_current_sprint.md` exists and has a current Sprint Metadata section
+- `SKILL_DIR/daily-actions-report/project_current_sprint.md` exists and has a current Sprint Metadata section
 - `SKILL_DIR/.env` exists with valid `ATLASSIAN_EMAIL`, `ATLASSIAN_TOKEN`, and `GITHUB_TOKEN`
 - Chrome MCP is available (required for GitHub PR scraping and Testray screenshots)
 - The Atlassian MCP is available (cloudId: `5d1aaa67-5d5e-4cca-b668-33b9742cfb4a`)
@@ -47,7 +47,7 @@ GITHUB_TOKEN=your_github_token
 
 ### Sprint Metadata
 
-Read only the **Sprint Metadata** section of `SKILL_DIR/headless-daily-actions-report/project_current_sprint.md` (sprint label, start/end dates, `actions_report_page_id`, `report_page_title`). Fail fast if the file is missing or the section is absent.
+Read only the **Sprint Metadata** section of `SKILL_DIR/daily-actions-report/project_current_sprint.md` (sprint label, start/end dates, `actions_report_page_id`, `report_page_title`). Fail fast if the file is missing or the section is absent.
 
 ### Jira Sprint Data
 

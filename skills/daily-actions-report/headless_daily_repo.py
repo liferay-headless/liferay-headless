@@ -19,7 +19,7 @@ Environment variables:
   ATLASSIAN_TOKEN   — Atlassian API token
 
 Sprint config (sprint label, dates, Confluence page ID) is read at runtime from
-  project_current_sprint.md in the headless-daily-actions-report skill folder.
+  project_current_sprint.md in the daily-actions-report skill folder.
 Nothing sprint-specific is hardcoded in this file.
 
 PUBLISH FALLBACK — IF THE SCRIPT'S PUBLISH STEP FAILS:
@@ -91,7 +91,7 @@ if _ENV_FILE.exists():
 # ── PATHS ────────────────────────────────────────────────────────────────────
 
 # Skill folder — where project_current_sprint.md lives
-SKILL_DIR = Path(__file__).parent / "headless-daily-actions-report"
+SKILL_DIR = Path(__file__).parent / "daily-actions-report"
 SPRINT_CONTEXT_FILE = SKILL_DIR / "project_current_sprint.md"
 
 # Output folder — HTML previews land here (same dir as the script)
