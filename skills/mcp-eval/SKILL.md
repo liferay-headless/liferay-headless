@@ -92,7 +92,7 @@ This constraint governs the attempt only. The one exception is post-mortem log r
 
 Three issues is a flag, not a stop sign. Work the case through every step it legitimately needs and record each defect as it surfaces. An issue is any moment the MCP fails to behave the way its own surface advertised: a POST rejected for a missing field the schema never marked `required`, a tool set whose name promised a scope it then refuses, a "success" response that produced no entity, a wrapper error on a call that should have succeeded. Each issue is also a defect to record. Steps that behave as documented cost nothing, and discovery (`getToolSets`, `getToolSummaries`, `getTool`) never counts as an issue on its own.
 
-Keep going past the third issue. Finding the fourth, fifth, or sixth defect in the same case is exactly what tells the reader how broken a surface is, and stopping early hides that signal. The threshold is a quality bar, not a budget: once `issuesUsed > 3` the case is a **FAIL** no matter how many steps you go on to complete, because a surface that costs four or more issues to drive has failed the usability test even when the work technically goes through. At three issues or fewer, the verdict rolls up from what actually happened (see **Scoring**).
+Keep going past the third issue. Finding the fourth, fifth, or sixth defect in the same case is exactly what tells the reader how broken a surface is, and stopping early hides that signal. The threshold is a quality bar, not a budget: once `issuesUsed > 3` the case is a **FAIL** no matter how many steps you go on to complete, because a surface that costs four or more issues to drive has failed the usability test even when the work technically goes through. At one to three issues the case is **PARTIAL**, and a clean run with zero issues is **OK** (see **Scoring**).
 
 Stop only when no remaining step has anything left to attempt — every dependency is missing, or the case has run to its natural end. That is a verdict, not a budget cutoff.
 
@@ -100,7 +100,7 @@ Stop only when no remaining step has anything left to attempt — every dependen
 
 Your case may bundle several steps or named conditions — a complex case especially. Do not collapse them prematurely. Evaluate each step or condition on its own: invoke it, observe the result, and note whether it held. An issue attaches to the specific step that misbehaved, not to the case as a whole.
 
-The case carries a single verdict, the rollup of its steps, defined under **Scoring** below. When the case has more than one step or condition, give each step its own entry in the `flow` array (format below) so the reader sees which part held and which broke instead of one opaque verdict. A step that could not be attempted because of an unresolvable dependency is a `flow` entry with `outcome: "blocked"`; a step that surfaced an MCP defect is `outcome: "issue"`.
+The case carries a single verdict, defined under **Scoring** below. When the case has more than one step or condition, give each step its own entry in the `flow` array (format below) so the reader sees which part held and which broke instead of one opaque verdict. A step that could not be attempted because of an unresolvable dependency is a `flow` entry with `outcome: "blocked"`; a step that surfaced an MCP defect is `outcome: "issue"`.
 
 # Prerequisite Handling
 
@@ -127,14 +127,15 @@ Late discovery is the most expensive kind: the user already invested steps befor
 
 # Scoring
 
-Pick one verdict for the case. First apply the threshold gate: when `issuesUsed > 3`, the verdict is **FAIL** regardless of how many steps succeeded. Otherwise — three issues or fewer — roll the steps up: **OK** only when every required step succeeded, **PARTIAL** when at least one succeeded and at least one did not, **FAIL** when no required step produced a recognisable success.
+The verdict is the **issue count** — `issuesUsed`, the number of `outcome: "issue"` flow entries — and nothing else:
 
-- **OK** — three issues or fewer, every required step completed, and the response confirms it: an entity ID, a `status: "Approved"` field, a 200 or 201 payload.
-- **OK (with wrapper bug)** — three issues or fewer; the underlying REST calls succeeded (real IDs or success payloads came back) but the MCP wrapper returned errors on one or more of them.
-- **PARTIAL** — three issues or fewer; at least one required step succeeded and at least one did not (e.g. created a draft but could not publish; the read-only variant succeeded while the write variant did not).
-- **FAIL** — `issuesUsed > 3`, or no required step produced a recognisable success.
+- **OK** — **zero issues**. Every step behaved exactly as its surface advertised; nothing got in the way.
+- **PARTIAL** — **one to three issues** (`1 <= issuesUsed <= 3`). The surface had defects the agent had to work around, whether or not every step ultimately completed.
+- **FAIL** — **more than three issues** (`issuesUsed > 3`). A surface that costs four or more issues to drive has failed the usability test, even when the work technically goes through.
 
-Below the threshold a case can finish OK with up to three issues (surface complaints, but every step ultimately worked) or FAIL with one (the single issue blocked everything else). Above it the count alone forces FAIL — but when you nonetheless drove every required step to success through the MCP, record that in `achievable` (see **Required Output**) so the reader sees the operation is possible, just too costly.
+The count is the whole rule. Do **not** promote a case to **OK** because the work eventually succeeded despite defects — a single issue makes it **PARTIAL**. Do **not** demote a clean run to **PARTIAL** because a step was slow or needed a documented prerequisite that behaved as advertised — zero issues is **OK**. A flow with no `issue` entries is OK; one to three is PARTIAL; four or more is FAIL.
+
+A clean **OK** carries a `happyPathNote`; every **PARTIAL** and **FAIL** carries one `defect` per issue. When `issuesUsed > 3` but you still drove the primary objective to success through the MCP, record that in `achievable` (see **Required Output**) so the reader sees the operation is possible, just too costly.
 
 # Post-FAIL Diagnosis
 
@@ -162,7 +163,7 @@ Return exactly one JSON object and nothing else: no Markdown, no code fence, no 
 {
   "caseNumber": <<CASE_NUMBER>>,
   "title": "<Use Case in Title Case>",
-  "verdict": "OK" | "OK (with wrapper bug)" | "PARTIAL" | "FAIL",
+  "verdict": "OK" | "PARTIAL" | "FAIL",
   "issuesUsed": <integer; may exceed issuesMax>,
   "issuesMax": 3,
   "flow": [
@@ -194,7 +195,7 @@ Return exactly one JSON object and nothing else: no Markdown, no code fence, no 
 Field rules:
 
 - **title** — the use case in Title Case, not the verbatim input.
-- **verdict** — one of the four strings exactly; the renderer keys its color off the `OK` / `PARTIAL` / `FAIL` prefix.
+- **verdict** — one of the three strings exactly; the renderer keys its color off the `OK` / `PARTIAL` / `FAIL` prefix.
 - **flow** — the unified timeline of MCP interactions, from discovery through the verdict. Each entry is an object with the following fields:
 	- `tool` — the `toolSet/toolName` invoked (string), or `null` for an entry that is not a tool call (a planning decision, a high-level "blocked" summary of unreached scope, the post-FAIL log read).
 	- `intent` — what the agent tried to accomplish at this step, written as a short imperative or noun phrase. Inline markup applies.
@@ -246,7 +247,7 @@ Field rules:
 	```
 
 - **happyPathNote** — for a clean success, one short observation worth keeping (e.g. that a friendly key worked, or that pagination mapped cleanly). Set it to `null` whenever any flow entry carries a `defect`.
-- **achievable** — the counterpart to `happyPathNote` for a threshold **FAIL**: when `issuesUsed > 3` but you still drove every required step to success through the MCP, set this to one explicit sentence saying so (e.g. **Completed end-to-end through the MCP after 5 issues** — the operation is possible, just costly). Set it to `null` whenever any required step remained incomplete, so a `null` here means the case truly could not be finished through the MCP.
+- **achievable** — the counterpart to `happyPathNote` for a threshold **FAIL**: when `issuesUsed > 3` but you still drove the **primary objective** to success through the MCP, set this to one explicit sentence saying so (e.g. **Completed end-to-end through the MCP after 5 issues** — the operation is possible, just costly). Set it to `null` whenever the primary objective remained unmet, so a `null` here means the case truly could not be finished through the MCP — which is the only kind of FAIL that is not merely about cost.
 - **Inline emphasis** — the `intent`, `result`, `description`, `detail`, `happyPathNote`, and `achievable` text render lightweight inline markup: wrap a phrase in `**double asterisks**` for bold and in `` `backticks` `` for code. Bold the one phrase that carries the point — the actual problem, the verdict-driving outcome — so the reader is not parsing a wall of even-weight prose. Do not bold whole sentences, and keep each text field to one or two crisp sentences rather than a paragraph.
 
 **Solutions.** Each entry in `defect.alternatives` and `defect.additional` is an object with `title`, `surface`, `detail`, and an optional `diff`. The `surface` selects where the fix lives, and the renderer color-codes it:
