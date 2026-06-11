@@ -1,0 +1,4 @@
+output/*
+!output/octocat/
+output/octocat/*.lock
+__pycache__/

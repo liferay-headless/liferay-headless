@@ -8,140 +8,35 @@ name: performance-review
 
 # Performance Review
 
-Generate a short, executive-grade markdown review of one team member for one review period (one of three per year — delivered in January, May, or September, each covering the preceding four months), grounded in Jira, GitHub, and git evidence pulled directly from those systems.
+Produce an executive-grade **HTML** review of one team member for one review period — delivered in January, May, or September, each covering the preceding four months — grounded in Jira, GitHub, and git evidence.
 
 ## References
 
-Before running, read both files — they are the source of truth for who is on the team and how to call Jira:
+- `../../rules/team.md` — roster. Resolve the caller's input to exactly one member; take the GitHub handle, Jira account ID, and role from here.
+- `../../rules/jira-rest-api.md` — Jira auth (`JIRA_API_USER` / `JIRA_API_TOKEN`); never the Atlassian MCP.
+- `graph.md` — the provenance graph every agent reads from and appends to (nodes, edges, id namespaces, the two write primitives).
+- `rating-calibration.md` — role-indexed calibration used by the Group, Axes, and Summary agents.
+- `querying.md` — how an agent pulls extra Jira/GitHub context, with guardrails.
 
-- `../../rules/team.md` — member roster. Use this to resolve the caller's input to exactly one member and to fill the `Role` line of the output. The `### Rating calibration` section below is indexed by the role taken from this table.
-- `../../rules/jira-rest-api.md` — how to authenticate `curl` against the Jira Cloud REST API. Use `curl` for the Jira comment fetch, not the Atlassian MCP.
+## Inputs
 
-## Input
+Both come from `${ARGUMENTS}`. If either is missing, ambiguous, or malformed, ask the caller — do not guess.
 
-### Team Member
+- **Team member** — resolve against the roster to exactly one member → `handle`, `jira_account_id`, `role`, `fte`, display `name`.
+- **Period** — `yyyy-jan` / `yyyy-may` / `yyyy-sep` (e.g. `2026-may`), resolved to the window and a delivery label (e.g. "May 2026"):
+  - `yyyy-may` → `yyyy-01-01` … `yyyy-05-01` (Jan–Apr)
+  - `yyyy-sep` → `yyyy-05-01` … `yyyy-09-01` (May–Aug)
+  - `yyyy-jan` → `(yyyy-1)-09-01` … `yyyy-01-01` (Sep–Dec of the previous year)
+  - If absent, default to the most recent of the three delivery months on or before today.
 
-The person under review. Comes from `${ARGUMENTS}`. If the identifier is missing, ambiguous, or cannot be matched to exactly one member, ask the caller — do not guess.
+## Orchestration
 
-### Period
+Five agents build the review on the shared graph (see `graph.md`). Each is a **`general-purpose` subagent** with its own folder under `agents/` (an `AGENT.md` + any scripts); everything for a run lives in `output/<handle>/` and the scripts take `--dir output/<handle>`. The orchestrator only sequences them — it never loads an artifact's contents.
 
-A review period named after the month in which the review is delivered, in the form `yyyy-jan`, `yyyy-may`, or `yyyy-sep` (e.g. `2026-may`). Comes from `${ARGUMENTS}`. Each review covers the preceding four months:
+Below, `<dir>` = `output/<handle>`.
 
-- `yyyy-may` → from `yyyy-01-01` (inclusive) to `yyyy-05-01` (exclusive) — covers Jan–Apr.
-- `yyyy-sep` → from `yyyy-05-01` to `yyyy-09-01` — covers May–Aug.
-- `yyyy-jan` → from `(yyyy-1)-09-01` to `yyyy-01-01` — covers Sep–Dec of the previous year.
-
-If absent, default to the current period — pick the most recent of the three delivery months that is on or before today and use that year. If malformed, ask the caller — do not guess.
-
-## Expected Output
-
-### Review Markdown
-
-A single markdown review printed directly to the conversation as the assistant's final reply. Do not write it to a file.
-
-The review draws on four sources of evidence, all pulled from GitHub and Jira via `gh` and `curl` against the REST APIs.
-
-The commit search and the PR search are independent queries against a fixed list of Liferay-related repositories — neither depends on the other's output. The repo list:
-
-- `liferay/liferay-portal`
-- `liferay/liferay-portal-ee`
-- `liferay-headless/liferay-portal`
-- `liferay-headless/liferay-headless`
-- `liferay-headless/github-actions`
-- `4lejandrito/cliferay`
-- The user's personal fork (`<gh-handle>/liferay-portal`, if it exists)
-
-1. **Commits** — Every commit authored by the user during the period, discovered with `gh search commits --author <login> --author-date <since>..<until>` scoped to the repo list via repeated `--repo <owner>/<name>` flags (or one call per repo). Extract ticket keys from each commit message. This is the most relevant piece of work. 
-1. **GitHub comments and reviews** — Comments and reviews the user left on any GitHub issue or pull request during the period. Start here, then also fetch the content of the comments:
-
-    ```bash
-    gh api "search/issues?q=commenter:<login>+updated:<since>..<until>&per_page=100" --paginate --jq '.items[] | "\(.updated_at)\t\(.html_url)\t\(.title)"' | sort -r
-    ```
-1. **Pull requests** — Every pull request authored by the user with activity in the period (opened, updated, merged, or closed), discovered with `gh search prs --author <login> --updated <since>..<until>` scoped to the same repo list via `--repo` flags. Capture title, target branch, state, merge status, source repository, and any linked Jira key — pay particular attention to PRs closed without merging or stalled at review, since those carry growth signal that commits alone do not show.
-1. **Jira comments** — Every Jira comment authored by the user during the period, on any ticket. Capture the comment `id` alongside its body and parent issue key — Jira's REST API does not return a browser URL for comments, so the deep-link must be constructed. The comments themselves are the evidence (root-cause framing, design pushback, scope challenges, status updates) — never the assignee field.
-
-Every assertion in the output must trace to a commit, PR, GitHub issue/PR comment or review, or Jira comment — never speculate about effort, intent, or attitude, and **never claim ownership of a ticket from the assignee field**. Render links using the data the API hands back; never expose bare SHAs, PR numbers, or comment ids:
-
-Take **time-to-complete** into consideration when shaping the review — a multi-month arc and a one-day fix are not equivalent achievements, and a ticket that has sat open for the full period is a stronger growth signal than one that briefly stalled. Derive each ticket's span from when the user actually started the work (the earlier of the first associated commit or PR) to when the work ended (the Jira `resolutiondate` for closed tickets, or the merge/close timestamp of the last associated PR, or the last associated commit otherwise).
-
-The output is short and executive — what a director reads in under a minute. Use this structure exactly:
-
-````markdown
-# <Display Name> — <Period label, e.g. "May 2026 review (Jan–Apr)">
-
-_Period: <since> – <until>_
-_Role: <resolved role from the team roster>_
-
-## Headline
-
-**Rating: <Meets expectations | Exceeds expectations | Exceeds expectations and enables others to exceed>.** <Overall rating based on the achievements and growth opportunities.>
-
-<One sentence summarizing the user's performance during the period.>
-
-<Number of commits, PRs, comments, and reviews authored during the period, as well as the number of Jira tickets with comments from the user.>
-
-## Achievements
-
-<Each `###` subsection IS one achievement; its bullets are the evidence for that achievement. Derive the achievements from the evidence. Order the achievements from highest to lowest rating.>
-
-### <Achievement name>
-
-**Rating: <Meets expectations | Exceeds expectations | Exceeds expectations and enables others to exceed>.** <One short sentence explaining why. Apply a high bar in general.>
-
-<One-sentence statement of the value the person delivered.>
-
-- [<TICKET-KEY, commit, PR, GitHub issue/PR comment or review, or Jira comment link>](<url>) — <evidence, in a few words>
-
-## Growth
-
-<Each `###` subsection IS one growth opportunity; its bullets are the evidence for that opportunity. Derive the opportunities from the evidence. Order the opportunities from lowest to highest rating. If no growth signal is present in the data, write a single subsection with the descriptor _"None evident given the data."_ and no bullets.>
-
-### <Growth opportunity name>
-
-**Rating: <Below expectations | Meets expectations>.** <One short sentence explaining why.>
-
-<One-sentence statement of what the person could improve on.>
-
-- [<TICKET-KEY, commit, PR, GitHub issue/PR comment or review, or Jira comment link>](<url>) — <evidence, in a few words>
-````
-
-Every body bullet is a single line of the form `<link> — <evidence>`, where `<link>` is a Markdown link to a ticket, PR, commit, GitHub issue/PR comment or review, or specific Jira comment and `<evidence>` is a terse phrase pointing to the concrete artifact behavior (root cause framed, backport landed, PR closed unmerged, ticket stalled, design pushback in review). When the evidence is a comment or review, link directly to the comment so a reader can read the actual analysis in one click — not the parent ticket or PR. No multi-sentence prose inside bullets; no bullets without a link.
-
-Achievements are grounded in concrete evidence: commits, PRs, substantive Jira comments, and substantive GitHub issue/PR comments and reviews. Commits and PRs show shipped code; Jira comments can carry equal weight — especially on customer-facing tickets (LPP and similar) where root-cause analysis, reproduction, and triage often happen entirely in comments before a small patch lands or before the ticket is handed off; GitHub comments and PR reviews carry weight when they shape design, catch real bugs, or unblock peers — review participation is part of the role for senior+ engineers and a legitimate basis for an achievement.
-
-## Rating calibration
-
-### Associate Software Engineer
-
-- **Below expectations.** Slips routine tickets despite mentorship; landed code regresses in review; needs hand-holding for ordinary work.
-- **Meets expectations.** Closes assigned bug tickets and small technical tasks with normal review feedback; absorbs guidance and applies it.
-- **Exceeds expectations.** Ships modest features independently; picks up adjacent issues without prompting; raises code quality bar for own work.
-- **Exceeds + enables others.** Authors reusable docs, fixtures, or onboarding artifacts the next associate inherits — rare at this level.
-
-### Mid Software Engineer
-
-- **Below expectations.** Routine domain work needs senior rescue; commitments slip without flagging; customer bugs sit untouched.
-- **Meets expectations.** Owns features and customer bug fixes end-to-end within an established domain; backports cleanly; gives review feedback.
-- **Exceeds expectations.** Drives multi-ticket arcs; shapes design within the domain; takes on customer-blocking or critical-priority work.
-- **Exceeds + enables others.** Builds shared tooling, conventions, or mentorship that lifts the team's mid-level cohort and reduces senior load.
-
-### Senior Software Engineer
-
-- **Below expectations.** Stays at mid-level scope; avoids cross-cutting work; defers architecture calls to others.
-- **Meets expectations.** Owns major features end-to-end; debugs hard issues independently; makes sound architecture calls in their domain.
-- **Exceeds expectations.** Leads multi-team initiatives; runs firefights; shapes technical direction across the domain; mentors mids.
-- **Exceeds + enables others.** Builds APIs/platforms other teams adopt; sets reusable patterns; raises the bar for the senior cohort.
-
-### Staff Software Engineer
-
-- **Below expectations.** Operates at senior scope without broadening influence; doesn't shape decisions outside immediate team.
-- **Meets expectations.** Drives multi-product initiatives; owns hardest problems; shapes cross-team architecture; influences other senior+ engineers.
-- **Exceeds expectations.** Defines engineering strategy for product areas; lands platform-level wins visible across the org.
-- **Exceeds + enables others.** Builds capabilities other Staff engineers and teams compound on; sets cross-org standards; force-multiplies the engineering function.
-
-### Team Lead
-
-- **Below expectations.** Personal IC work without team uplift; team blocked, unbalanced, or unclear on priorities.
-- **Meets expectations.** Ships personal work AND unblocks the team; runs planning, reviews, and quality; closes the loop on commitments.
-- **Exceeds expectations.** Drives team-wide outcomes; owns product quality and roadmap execution; absorbs firefighting without dropping plan work.
-- **Exceeds + enables others.** Builds capabilities other Liferay teams adopt; force-multiplies the engineering org beyond the team's headcount.
+1. **Resolve inputs** (above) — the only values the orchestrator holds.
+2. **Run the agents in order**, handing each its `AGENT.md` + `graph.md` + `<dir>` + the values it needs:
+   Collect (`agents/0-collect/`, also `handle`/`jira_account_id`/`since`/`until`) → Group (`agents/1-group/`, `role` + `fte`) → Axes (`agents/2-axes/`, `role` + `fte`) → Summary (`agents/3-summary/`, `role` + `fte`) → Render (`agents/4-render/`, the person details).
+   The grade-producing agents (Group, Axes, Summary) all take `fte` and apply the capacity-normalization rule in `rating-calibration.md` (grades scale to capacity; scores stay absolute). Confirm each agent's output exists before starting the next.
+3. **Verify**: `./graph.py --dir <dir> validate` passes; report `<dir>/review.html` and the rating.

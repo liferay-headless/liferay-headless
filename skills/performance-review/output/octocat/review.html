@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sam Sample — Performance Review — May 2026</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --line: #272b35; --text: #e6e8ee;
+    --muted: #9aa3b2; --green: #3fb950; --amber: #d29922; --red: #f85149; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--text);
+         background: radial-gradient(1200px 760px at 50% -8%, #1d2634 0%, var(--bg) 58%) fixed, var(--bg);
+         font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 28px; }
+  .header { display: flex; gap: 26px; align-items: center; margin-bottom: 30px; }
+  .avatar-wrap { width: 120px; height: 120px; flex: none; }
+  .avatar { width: 120px; height: 120px; border-radius: 50%; border: 2px solid var(--line);
+            box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  h1 { font-size: 38px; line-height: 1.1; margin: 0 0 6px; letter-spacing: -.02em; font-weight: 700; }
+  .role { color: var(--text); font-size: 17px; font-weight: 600; }
+  .period { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  /* rating badge (clickable → summary node) */
+  .badge { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; line-height: 1;
+           padding: 9px 16px 7px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+           text-transform: uppercase; letter-spacing: .06em; cursor: pointer; border: 1px solid; }
+  .badge .pulse { width: 8px; height: 8px; background: currentColor; }
+  .badge .pulse::after { box-shadow: 0 0 0 2px currentColor; }
+  .badge.meets   { color: var(--accent); border-color: rgba(88,166,255,.45);  background: rgba(88,166,255,.12); }
+  .badge.exceeds { color: var(--green);  border-color: rgba(63,185,80,.45);   background: rgba(63,185,80,.12); }
+  .badge.enables { color: #7ee787;       border-color: rgba(126,231,135,.45); background: rgba(126,231,135,.12); }
+  .headline { position: relative; border-radius: 22px; margin: 0; width: 100%; max-width: 1200px;
+              padding: 48px 56px;
+              background: linear-gradient(160deg, #1b202b 0%, var(--card) 60%);
+              border: 1px solid rgba(255,255,255,.07);
+              box-shadow: 0 30px 90px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
+              display: flex; gap: 64px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .headline-main { flex: 1 1 440px; min-width: 0; }
+  .summary { font-size: 19px; line-height: 1.5; color: #d7dbe4; max-width: 600px; }
+  .counts { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+  .chip { display: inline-flex; align-items: center; line-height: 1; padding: 7px 13px 5px; border-radius: 999px;
+          border: 1px solid var(--line); background: rgba(255,255,255,.025); color: var(--muted); font-size: 13px; }
+  .chip b { color: var(--text); font-weight: 700; margin-right: 5px; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  /* pulsing click affordance (the only clickable things on the page) */
+  .pulse { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); position: relative; cursor: pointer; flex: none; }
+  .pulse::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--accent); animation: pulsering 2s ease-out infinite; }
+  @keyframes pulsering { 0% { transform: scale(.75); opacity: .6; } 100% { transform: scale(2.4); opacity: 0; } }
+  .apulse-dot { cursor: pointer; }
+  /* radar */
+  .radar { flex: 0 1 460px; min-width: 280px; position: relative; }
+  .radar svg { width: 100%; height: auto; overflow: visible; display: block; }
+  .radar .axis-label { fill: var(--muted); font-size: 13px; font-weight: 600; }
+  .radar .score { filter: drop-shadow(0 0 8px rgba(88,166,255,.45)); }
+  /* graph drill-down panel (static machinery) */
+  .gnav { cursor: pointer; }
+  #gscrim { position: fixed; inset: 0; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 40; }
+  #gpanel { position: fixed; top: 50%; left: 50%; width: 660px; max-width: 92vw; height: min(85vh, 640px); background: var(--card);
+            border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 56px rgba(0,0,0,.55);
+            transform: translate(-50%, -48%) scale(.98); opacity: 0; pointer-events: none;
+            transition: opacity .15s ease, transform .15s ease; z-index: 41; display: flex; flex-direction: column; overflow: hidden; }
+  body.gopen #gscrim { opacity: 1; pointer-events: auto; }
+  body.gopen #gpanel { transform: translate(-50%, -50%) scale(1); opacity: 1; pointer-events: auto; }
+  #gcrumb { padding: 13px 18px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02);
+            font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  #gcrumb a { cursor: pointer; color: var(--accent); } #gcrumb .sep { color: #3a4150; }
+  #gclose { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; padding: 0 4px; }
+  #gclose:hover { color: var(--text); }
+  #gbody { padding: 22px 26px 26px; overflow: auto; flex: 1; min-height: 0; }
+  .gh-type { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .gh-title { font-size: 21px; font-weight: 700; line-height: 1.25; letter-spacing: -.01em; margin: 5px 0 0; }
+  .gh-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .gstat { display: inline-flex; align-items: center; line-height: 1; padding: 6px 11px 5px; border-radius: 999px;
+           border: 1px solid var(--line); background: rgba(255,255,255,.025); font-size: 12px; color: var(--muted); }
+  .gstat b { color: var(--text); font-weight: 700; margin-right: 5px; }
+  .gbadge { display: inline-flex; align-items: center; line-height: 1; padding: 6px 11px 5px; border-radius: 999px;
+            font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; border: 1px solid; flex: none; }
+  .gb-below   { color: var(--red);    border-color: rgba(248,81,73,.45);   background: rgba(248,81,73,.12); }
+  .gb-meets   { color: var(--accent); border-color: rgba(88,166,255,.45);  background: rgba(88,166,255,.12); }
+  .gb-exceeds { color: var(--green);  border-color: rgba(63,185,80,.45);   background: rgba(63,185,80,.12); }
+  .gb-enables { color: #7ee787;       border-color: rgba(126,231,135,.45); background: rgba(126,231,135,.12); }
+  .gh-role, .gh-date { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .gh-text { font-size: 15px; line-height: 1.6; color: #cfd4de; margin-top: 16px; }
+  .gsec { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin: 24px 0 10px; }
+  .gedge { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 8px 0; border: 1px solid var(--line);
+           border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.02);
+           transition: border-color .12s ease, background .12s ease; }
+  .gedge:hover { border-color: var(--accent); background: rgba(88,166,255,.07); }
+  a.gedge { color: var(--text); } a.gedge:hover { text-decoration: none; }
+  .gedge .ec { flex: 1; min-width: 0; }
+  .gedge .et { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .gedge .el { font-weight: 600; font-size: 14px; margin: 3px 0 2px; }
+  .gedge .ew { font-size: 12.5px; color: var(--muted); }
+  .gedge .echev { color: var(--muted); font-size: 20px; flex: none; line-height: 1; }
+  .gleaf { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; padding: 9px 15px; border-radius: 9px;
+           border: 1px solid var(--line); color: var(--accent); font-size: 13px; font-weight: 600; }
+  .gleaf:hover { border-color: var(--accent); background: rgba(88,166,255,.08); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Jinja2 template. render.py fills it from the graph + the person details, supplying:
+       name, role, period, gh; rating_class, rating_text (from the summary node's grade); summary; counts (per type);
+       axes (six, each with its score-point x/y); graph_json (the whole graph, embedded for the panel).
+       The page is JUST this top section — identity · rating · summary · radar; everything else is reached
+       by clicking a pulsing dot. The drill-down panel + JS below are static and walk the embedded graph. -->
+
+  <div class="headline">
+    <div class="headline-main">
+      <div class="header">
+        <div class="avatar-wrap">
+          <img class="avatar" src="https://github.com/octocat.png" alt="Sam Sample">
+        </div>
+        <div>
+          <h1>Sam Sample</h1>
+          <div class="role">Senior Software Engineer</div>
+          <div class="period">May 2026 review</div>
+        </div>
+      </div>
+      <!-- rating badge at the top of the summary block ← the `summary` node's grade (class+text by tier) -->
+      <div><span class="badge meets" data-node="summary"><span class="pulse"></span>Meets expectations</span></div>
+      <!-- summary ← the `summary` node .text (the rating badge above opens the node) -->
+      <div class="summary">Synthetic sample: solid end-to-end delivery of the widget with strong test coverage; review and discovery are steady. Use this to iterate on the template without real data.</div>
+      <div class="counts">
+        <span class="chip"><b>1</b> commits</span>
+        <span class="chip"><b>1</b> PRs</span>
+        <span class="chip"><b>1</b> peer reviews</span>
+        <span class="chip"><b>1</b> Jira comments</span>
+        <span class="chip"><b>1</b> tickets filed</span>
+      </div>
+    </div>
+    <div class="radar">
+      <!-- N-GON radar, one vertex per axis clockwise from the top. render.py computes all
+           geometry from the axis order (centre 160.0,150.0, R=120): rings (concentric grids),
+           spokes (centre→vertex), per-axis label position/anchor, and each axis's score point.
+           point = centre + (score/100)·(vertex−centre). Each axis's pulsing dot carries
+           data-node="axis:<key>" → click opens that axis. -->
+      <svg viewBox="-40 -6 400 322" role="img" aria-label="Rating radar">
+        <polygon points="160.0,120.0 183.45,131.3 189.25,156.68 173.02,177.03 146.98,177.03 130.75,156.68 136.55,131.3" fill="none" stroke="#272b35"/>
+        <polygon points="160.0,90.0 206.91,112.59 218.5,163.35 186.03,204.06 133.97,204.06 101.5,163.35 113.09,112.59" fill="none" stroke="#272b35"/>
+        <polygon points="160.0,60.0 230.36,93.89 247.74,170.03 199.05,231.09 120.95,231.09 72.26,170.03 89.64,93.89" fill="none" stroke="#272b35"/>
+        <polygon points="160.0,30.0 253.82,75.18 276.99,176.7 212.07,258.12 107.93,258.12 43.01,176.7 66.18,75.18" fill="none" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="160.0" y2="30.0" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="253.82" y2="75.18" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="276.99" y2="176.7" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="212.07" y2="258.12" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="107.93" y2="258.12" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="43.01" y2="176.7" stroke="#3a4150"/>
+        <line x1="160.0" y1="150.0" x2="66.18" y2="75.18" stroke="#3a4150"/>
+        <polygon class="score" points="160.0,78.0 197.53,120.07 251.25,170.83 196.45,225.68 131.36,209.46 101.5,163.35 80.25,86.4 " fill="rgba(88,166,255,.22)" stroke="#58a6ff" stroke-width="2.5"/>
+        <text class="axis-label" x="160.0" y="16.0" text-anchor="middle">PR Reviews</text>
+        <text class="axis-label" x="264.77" y="66.45" text-anchor="start">LPP</text>
+        <text class="axis-label" x="290.64" y="179.82" text-anchor="start">Testing</text>
+        <text class="axis-label" x="218.14" y="280.73" text-anchor="start">Delivery</text>
+        <text class="axis-label" x="101.86" y="280.73" text-anchor="end">Discovery</text>
+        <text class="axis-label" x="29.36" y="179.82" text-anchor="end">Speed</text>
+        <text class="axis-label" x="55.23" y="66.45" text-anchor="end">Brian</text>
+        
+        <!-- one PULSING CLICKABLE dot per axis at its score point — the only clickable things on the radar -->
+        <circle cx="160.0" cy="78.0" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:pr_reviews" cx="160.0" cy="78.0" r="6" fill="#58a6ff"/>
+        <circle cx="197.53" cy="120.07" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:lpp" cx="197.53" cy="120.07" r="6" fill="#58a6ff"/>
+        <circle cx="251.25" cy="170.83" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:testing" cx="251.25" cy="170.83" r="6" fill="#58a6ff"/>
+        <circle cx="196.45" cy="225.68" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:delivery" cx="196.45" cy="225.68" r="6" fill="#58a6ff"/>
+        <circle cx="131.36" cy="209.46" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:discovery" cx="131.36" cy="209.46" r="6" fill="#58a6ff"/>
+        <circle cx="101.5" cy="163.35" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:speed" cx="101.5" cy="163.35" r="6" fill="#58a6ff"/>
+        <circle cx="80.25" cy="86.4" r="6" fill="none" stroke="#58a6ff" stroke-width="1.5" pointer-events="none"><animate attributeName="r" values="6;15" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values=".55;0" dur="2s" repeatCount="indefinite"/></circle>
+        <circle class="apulse-dot" data-node="axis:brian" cx="80.25" cy="86.4" r="6" fill="#58a6ff"/>
+        
+      </svg>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== drill-down panel + graph (static; do not edit per-run except the embedded graph) ===== -->
+<div id="gscrim"></div>
+<aside id="gpanel" aria-label="Provenance"><div id="gcrumb"><span id="gtrail"></span><span id="gclose" title="Close">×</span></div><div id="gbody"></div></aside>
+<script id="graph" type="application/json">{"nodes": [{"id": "ev:c1", "type": "commit", "label": "DEMO-1 Implement the widget", "url": "https://example.com/commit/c1", "date": "2026-03-02"}, {"id": "ev:p1", "type": "pull_request", "label": "DEMO-1 Implement the widget", "url": "https://example.com/pull/1", "date": "2026-03-03"}, {"id": "ev:rc1", "type": "review_comment", "label": "DEMO-7 Tidy the loader — review note", "url": "https://example.com/pull/7#c1", "date": "2026-03-05"}, {"id": "ev:jc1", "type": "jira_comment", "label": "Traced the failure to the cache layer", "url": "https://example.com/browse/DEMO-2?c=1", "date": "2026-03-06"}, {"id": "ev:ct1", "type": "created_ticket", "label": "DEMO-2 Crash on empty input", "url": "https://example.com/browse/DEMO-2", "date": "2026-03-01"}, {"id": "wi:DEMO-1", "type": "work_item", "label": "Implement the widget", "ticket": "DEMO-1", "role": "authored the widget and its tests, drove it to merge", "grade": "meets", "theme": ["delivery", "testing"], "text": "Built the widget end-to-end"}, {"id": "axis:pr_reviews", "type": "radar_axis", "label": "PR Reviews", "grade": "meets", "score": 60, "text": "Steady review volume, mostly tactical notes."}, {"id": "axis:lpp", "type": "radar_axis", "label": "LPP (Support)", "grade": "meets", "score": 40, "text": "One customer bug triaged; light support load."}, {"id": "axis:testing", "type": "radar_axis", "label": "Testing", "grade": "exceeds", "score": 78, "text": "Shipped a full test suite alongside the feature."}, {"id": "axis:delivery", "type": "radar_axis", "label": "Delivery", "grade": "meets", "score": 70, "text": "Shipped the widget end-to-end."}, {"id": "axis:discovery", "type": "radar_axis", "label": "Discovery", "grade": "meets", "score": 55, "text": "Root-caused one cache-layer failure."}, {"id": "axis:speed", "type": "radar_axis", "label": "Speed", "grade": "meets", "score": 50, "text": "Median ~5 d to land."}, {"id": "summary", "type": "summary", "label": "Summary", "grade": "meets", "text": "Synthetic sample: solid end-to-end delivery of the widget with strong test coverage; review and discovery are steady. Use this to iterate on the template without real data."}, {"id": "summary:finding:1", "type": "finding", "grade": "exceeds", "label": "Widget shipped with its own test suite", "text": "Spans Delivery + Testing."}, {"id": "discovery:finding:1", "type": "finding", "label": "Root-caused the empty-input crash", "grade": "meets", "text": "Traced the empty-input failure to the cache layer and filed a sharp repro (DEMO-2)."}, {"id": "wi:DEMO-7", "type": "work_item", "label": "Tidy the loader", "ticket": "DEMO-7", "role": "reviewer — reviewed the loader cleanup", "grade": "meets", "text": "reviewed the loader change and suggested a tidy-up"}, {"id": "axis:brian", "type": "radar_axis", "label": "Brian", "score": 85, "grade": "exceeds", "text": "Clean record with Brian: 0 rejections across 6 forwarded PRs (small sample)."}], "edges": [{"from": "wi:DEMO-1", "to": "ev:c1", "why": "commit on the ticket"}, {"from": "wi:DEMO-1", "to": "ev:p1", "why": "pull request"}, {"from": "axis:speed", "to": "ev:c1", "why": "5 d to land"}, {"from": "summary", "to": "axis:testing", "why": "drawn into the summary"}, {"from": "summary", "to": "axis:delivery", "why": "drawn into the summary"}, {"from": "summary", "to": "summary:finding:1", "why": "drawn into the summary"}, {"from": "summary:finding:1", "to": "axis:testing", "why": "the test suite"}, {"from": "summary:finding:1", "to": "axis:delivery", "why": "shipped end-to-end"}, {"from": "summary:finding:1", "to": "wi:DEMO-1", "why": "the widget itself"}, {"from": "axis:lpp", "to": "ev:ct1", "why": "Triaged a customer crash report"}, {"from": "axis:testing", "to": "wi:DEMO-1", "why": "Unit + integration coverage shipped with the feature."}, {"from": "axis:delivery", "to": "wi:DEMO-1", "why": "Delivered the widget feature"}, {"from": "axis:discovery", "to": "discovery:finding:1", "why": "the investigation behind the score"}, {"from": "discovery:finding:1", "to": "ev:jc1", "why": "root-cause analysis in the ticket thread"}, {"from": "discovery:finding:1", "to": "ev:ct1", "why": "filed the sharp bug repro"}, {"from": "wi:DEMO-7", "to": "ev:rc1", "why": "inline review comment"}, {"from": "axis:pr_reviews", "to": "wi:DEMO-7", "why": "reviewed DEMO-7"}, {"from": "axis:brian", "to": "ev:p1", "why": "Brian rebased onto master — accepted"}]}</script>
+<script>
+(function(){
+  var G = JSON.parse(document.getElementById('graph').textContent);
+  var N = {}; G.nodes.forEach(function(n){ N[n.id]=n; });
+  var OUT = {}; G.edges.forEach(function(e){ (OUT[e.from]=OUT[e.from]||[]).push(e); });
+  var stack = [];
+  var TYPE_LABEL = {pull_request:'pull request', review_comment:'review comment', jira_comment:'jira comment',
+    created_ticket:'filed ticket', commit:'commit', comment:'comment', work_item:'work item',
+    radar_axis:'radar axis', finding:'finding', summary:'summary', lpp_ticket:'LPP ticket', brian_review:'Brian review'};
+  function tl(t){ return t.indexOf('review:')===0 ? 'pr review ('+t.slice(7)+')' : (TYPE_LABEL[t]||t); }
+  function esc(s){ var d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+  function gradeClass(g){ return {below:'gb-below',meets:'gb-meets',exceeds:'gb-exceeds','exceeds-enables':'gb-enables'}[g] || 'gb-meets'; }
+  function gbadge(g){ return '<span class="gbadge '+gradeClass(g)+'">'+esc(g)+'</span>'; }
+  function render(){
+    var id = stack[stack.length-1], nd = N[id]; if(!nd) return;
+    document.getElementById('gtrail').innerHTML = stack.map(function(sid,i){
+      return i===stack.length-1 ? '<b>'+esc(N[sid].label.slice(0,24))+'</b>' : '<a data-i="'+i+'">'+esc(N[sid].label.slice(0,18))+'</a>';
+    }).join('<span class="sep"> ▸ </span>');
+    var h = '<div class="gh-type">'+esc(tl(nd.type))+'</div><div class="gh-title">'+esc(nd.label)+'</div>';
+    var badges = [];
+    if(nd.grade) badges.push(gbadge(nd.grade));
+    if(nd.score!=null) badges.push('<span class="gstat"><b>'+nd.score+'</b>score</span>');
+    if(badges.length) h += '<div class="gh-badges">'+badges.join('')+'</div>';
+    if(nd.role) h += '<div class="gh-role">role: '+esc(nd.role)+'</div>';
+    if(nd.text) h += '<div class="gh-text">'+esc(nd.text)+'</div>';
+    if(nd.date) h += '<div class="gh-date">'+esc(nd.date)+'</div>';
+    if(nd.url) h += '<a class="gleaf" href="'+esc(nd.url)+'" target="_blank" rel="noopener">Open source ↗</a>';
+    var outs = OUT[id]||[];
+    if(outs.length){
+      h += '<div class="gsec">Grounded in ('+outs.length+')</div>';
+      outs.forEach(function(e){ var t=N[e.to]; if(!t) return;
+        var inner = '<div class="ec"><div class="et">'+esc(tl(t.type))+'</div><div class="el">'+esc(t.label)+'</div><div class="ew">'+esc(e.why)+'</div></div>'
+                  + (t.grade ? gbadge(t.grade) : '');
+        // a grounding row pointing at an evidence leaf IS the source link — no empty drill-down hop
+        if(!(OUT[e.to]||[]).length && t.url){
+          h += '<a class="gedge" href="'+esc(t.url)+'" target="_blank" rel="noopener">'+inner+'<span class="echev">↗</span></a>';
+        } else {
+          h += '<div class="gedge" data-to="'+esc(e.to)+'">'+inner+'<span class="echev">›</span></div>';
+        } });
+    }
+    document.getElementById('gbody').innerHTML = h;
+  }
+  function openNode(id){ if(!N[id]) return; stack=[id]; render(); document.body.classList.add('gopen'); }
+  document.addEventListener('click', function(ev){
+    var nav = ev.target.closest('[data-node]');
+    if(nav){ openNode(nav.getAttribute('data-node')); return; }
+    var edge = ev.target.closest('.gedge[data-to]');
+    if(edge){ stack.push(edge.getAttribute('data-to')); render(); return; }
+    var crumb = ev.target.closest('#gtrail a');
+    if(crumb){ stack = stack.slice(0, +crumb.getAttribute('data-i')+1); render(); return; }
+    if(ev.target.id==='gclose' || ev.target.id==='gscrim'){ document.body.classList.remove('gopen'); }
+  });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') document.body.classList.remove('gopen'); });
+})();
+</script>
+</body>
+</html>

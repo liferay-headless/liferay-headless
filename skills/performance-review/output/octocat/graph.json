@@ -1,0 +1,245 @@
+{
+  "nodes": [
+    {
+      "id": "ev:c1",
+      "type": "commit",
+      "label": "DEMO-1 Implement the widget",
+      "url": "https://example.com/commit/c1",
+      "date": "2026-03-02",
+      "tickets": [
+        "DEMO-1"
+      ]
+    },
+    {
+      "id": "ev:p1",
+      "type": "pull_request",
+      "label": "DEMO-1 Implement the widget",
+      "url": "https://example.com/pull/1",
+      "date": "2026-03-03",
+      "tickets": [
+        "DEMO-1"
+      ]
+    },
+    {
+      "id": "ev:rc1",
+      "type": "review_comment",
+      "label": "DEMO-7 Tidy the loader — review note",
+      "url": "https://example.com/pull/7#c1",
+      "date": "2026-03-05",
+      "tickets": [
+        "DEMO-7"
+      ]
+    },
+    {
+      "id": "ev:jc1",
+      "type": "jira_comment",
+      "label": "Traced the failure to the cache layer",
+      "url": "https://example.com/browse/DEMO-2?c=1",
+      "date": "2026-03-06",
+      "tickets": [
+        "DEMO-2"
+      ]
+    },
+    {
+      "id": "ev:ct1",
+      "type": "created_ticket",
+      "label": "DEMO-2 Crash on empty input",
+      "url": "https://example.com/browse/DEMO-2",
+      "date": "2026-03-01",
+      "tickets": [
+        "DEMO-2"
+      ]
+    },
+    {
+      "id": "wi:DEMO-1",
+      "type": "work_item",
+      "label": "Implement the widget",
+      "ticket": "DEMO-1",
+      "role": "authored the widget and its tests, drove it to merge",
+      "grade": "meets",
+      "theme": [
+        "delivery",
+        "testing"
+      ],
+      "text": "Built the widget end-to-end"
+    },
+    {
+      "id": "axis:pr_reviews",
+      "type": "radar_axis",
+      "label": "PR Reviews",
+      "grade": "meets",
+      "score": 60,
+      "text": "Steady review volume, mostly tactical notes."
+    },
+    {
+      "id": "axis:lpp",
+      "type": "radar_axis",
+      "label": "LPP (Support)",
+      "grade": "meets",
+      "score": 40,
+      "text": "One customer bug triaged; light support load."
+    },
+    {
+      "id": "axis:testing",
+      "type": "radar_axis",
+      "label": "Testing",
+      "grade": "exceeds",
+      "score": 78,
+      "text": "Shipped a full test suite alongside the feature."
+    },
+    {
+      "id": "axis:delivery",
+      "type": "radar_axis",
+      "label": "Delivery",
+      "grade": "meets",
+      "score": 70,
+      "text": "Shipped the widget end-to-end."
+    },
+    {
+      "id": "axis:discovery",
+      "type": "radar_axis",
+      "label": "Discovery",
+      "grade": "meets",
+      "score": 55,
+      "text": "Root-caused one cache-layer failure."
+    },
+    {
+      "id": "axis:speed",
+      "type": "radar_axis",
+      "label": "Speed",
+      "grade": "meets",
+      "score": 50,
+      "text": "Median ~5 d to land."
+    },
+    {
+      "id": "summary",
+      "type": "summary",
+      "label": "Summary",
+      "grade": "meets",
+      "text": "Synthetic sample: solid end-to-end delivery of the widget with strong test coverage; review and discovery are steady. Use this to iterate on the template without real data."
+    },
+    {
+      "id": "summary:finding:1",
+      "type": "finding",
+      "grade": "exceeds",
+      "label": "Widget shipped with its own test suite",
+      "text": "Spans Delivery + Testing."
+    },
+    {
+      "id": "discovery:finding:1",
+      "type": "finding",
+      "label": "Root-caused the empty-input crash",
+      "grade": "meets",
+      "text": "Traced the empty-input failure to the cache layer and filed a sharp repro (DEMO-2)."
+    },
+    {
+      "id": "wi:DEMO-7",
+      "type": "work_item",
+      "label": "Tidy the loader",
+      "ticket": "DEMO-7",
+      "role": "reviewer — reviewed the loader cleanup",
+      "grade": "meets",
+      "text": "reviewed the loader change and suggested a tidy-up"
+    },
+    {
+      "id": "axis:brian",
+      "type": "radar_axis",
+      "label": "Brian",
+      "score": 85,
+      "grade": "exceeds",
+      "text": "Clean record with Brian: 0 rejections across 6 forwarded PRs (small sample)."
+    }
+  ],
+  "edges": [
+    {
+      "from": "wi:DEMO-1",
+      "to": "ev:c1",
+      "why": "commit on the ticket"
+    },
+    {
+      "from": "wi:DEMO-1",
+      "to": "ev:p1",
+      "why": "pull request"
+    },
+    {
+      "from": "axis:speed",
+      "to": "ev:c1",
+      "why": "5 d to land"
+    },
+    {
+      "from": "summary",
+      "to": "axis:testing",
+      "why": "drawn into the summary"
+    },
+    {
+      "from": "summary",
+      "to": "axis:delivery",
+      "why": "drawn into the summary"
+    },
+    {
+      "from": "summary",
+      "to": "summary:finding:1",
+      "why": "drawn into the summary"
+    },
+    {
+      "from": "summary:finding:1",
+      "to": "axis:testing",
+      "why": "the test suite"
+    },
+    {
+      "from": "summary:finding:1",
+      "to": "axis:delivery",
+      "why": "shipped end-to-end"
+    },
+    {
+      "from": "summary:finding:1",
+      "to": "wi:DEMO-1",
+      "why": "the widget itself"
+    },
+    {
+      "from": "axis:lpp",
+      "to": "ev:ct1",
+      "why": "Triaged a customer crash report"
+    },
+    {
+      "from": "axis:testing",
+      "to": "wi:DEMO-1",
+      "why": "Unit + integration coverage shipped with the feature."
+    },
+    {
+      "from": "axis:delivery",
+      "to": "wi:DEMO-1",
+      "why": "Delivered the widget feature"
+    },
+    {
+      "from": "axis:discovery",
+      "to": "discovery:finding:1",
+      "why": "the investigation behind the score"
+    },
+    {
+      "from": "discovery:finding:1",
+      "to": "ev:jc1",
+      "why": "root-cause analysis in the ticket thread"
+    },
+    {
+      "from": "discovery:finding:1",
+      "to": "ev:ct1",
+      "why": "filed the sharp bug repro"
+    },
+    {
+      "from": "wi:DEMO-7",
+      "to": "ev:rc1",
+      "why": "inline review comment"
+    },
+    {
+      "from": "axis:pr_reviews",
+      "to": "wi:DEMO-7",
+      "why": "reviewed DEMO-7"
+    },
+    {
+      "from": "axis:brian",
+      "to": "ev:p1",
+      "why": "Brian rebased onto master — accepted"
+    }
+  ]
+}
