@@ -11,7 +11,7 @@ Source of truth for who is on the Headless team and how to address them across J
 | Mid Software Engineer       | daniel.raposo@liferay.com                          | `712020:7f3f1739-bbf7-4824-9b42-7e1196684ff6` | `dannielraposo`       | `@Daniel Raposo`     | 1.0  |
 | Mid Software Engineer       | gabor.komaromi@liferay.com                         | `606da595edc14f00769a90f1`                    | `GaborKomaromi`       | `@Gábor Komáromi`    | 1.0  |
 | Mid Software Engineer       | jaime.leon@liferay.com                             | `633c09763ac41ebde76da845`                    | `jaimelr10`           | `@Jaime León Rosado` | 1.0  |
-| Mid Software Engineer       | jorge.gonzalez@liferay.com                         | `605242d9009fee00693ade38`                    | `boton`               | `@boton`             | 0.75 |
+| Senior Software Engineer       | jorge.gonzalez@liferay.com                         | `605242d9009fee00693ade38`                    | `boton`               | `@boton`             | 0.75 |
 | Senior Software Engineer    | joseluis.navarro@liferay.com                       | `712020:2de6b052-0fdc-4f34-8b53-9bede77e739d` | `joseluisnavarro2025` | `@joseluis.navarro`  | 1.0  |
 | Associate Software Engineer | magdalena.jedraszak@liferay.com                    | `6107dedec51f3a0069dffc8a`                    | `magjed4289`          | `@Meg Jedraszak`     | 1.0  |
 | Senior Software Engineer    | petteri.karttunen@liferay.com                      | `557058:09ff46ee-56b3-491b-9454-4540bf458976` | `peerkar`             | `@Petteri Karttunen` | 1.0  |
