@@ -20,6 +20,9 @@ remote tracking `brianchandotcom/liferay-portal`. Forwarding rewrites commit SHA
 All commits matching means the work landed. The PR may show as `CLOSED` (the CI
 bot closes it on forward) rather than merged.
 
+When starting from a PR, a single PR may carry several tickets. Collect every
+distinct `LPD-#####` from its commit messages and evaluate each on its own.
+
 ## Locate the Ticket Carrying the PR
 
 The PR URL lives in the **Git Pull Request** field (`customfield_10201`). A
