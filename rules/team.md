@@ -4,6 +4,7 @@ Source of truth for who is on the Headless team and how to address them across J
 
 | Role                        | Email(s)                                           | Jira account ID                               | GitHub handle         | Slack handle         | FTE  |
 | --------------------------- | -------------------------------------------------- | --------------------------------------------- | --------------------- | -------------------- | ---- |
+| Staff Software Engineer     | adolfo.perez@liferay.com                           | `6018dd7ccd564b00683e8061`                    | `adolfopa`            | `@Adolfo Pérez`      | 1.0  |
 | Mid Software Engineer       | alberto.moreno@liferay.com, jalber786@gmail.com    | `64198a787222b08f3e722b76`                    | `albertojml`          | `@Alberto Moreno`    | 1.0  |
 | Team Lead                   | alejandro.tardin@liferay.com, alejandro@tardin.com | `5ce7d3ef8fa24d0dd2de9989`                    | `4lejandrito`         | `@Alejandro Tardín`  | 1.0  |
 | Product Owner               | benicio.herrero@liferay.com                        | `63e2412e8978d7a4353c9e95`                    | `beni-the-po`         | `@Beni`              | 1.0  |
