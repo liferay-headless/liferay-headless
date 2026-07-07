@@ -1,12 +1,12 @@
 # Sprint Context
 
 ## Sprint Metadata
-- sprint_label: 26M2|DEV#12|Jun01-Jun12
-- sprint_field: HL26M2|DEV#12|Jun01-Jun12
-- label_dev: 26M2|DEV#12|Jun01-Jun12
-- label_dis: 26M2|DIS#12|Jun01-Jun12
-- start_date: 2026-06-01
-- end_date: 2026-06-12
+- sprint_label: 26M3|DEV#14|Jun29-Jul10
+- sprint_field: HL26M3|DEV#14|Jun29-Jul10
+- label_dev: 26M3|DEV#14|Jun29-Jul10
+- label_dis: 26M3|DIS#14|Jun29-Jul10
+- start_date: 2026-06-29
+- end_date: 2026-07-10
 - actions_report_page_id: 4899110937
 - actions_report_url: https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/4899110937/26M2+DEV+11+May18-May29+Daily+Actions+Report
 - report_page_title: Headless Team — Daily Actions Report
@@ -39,11 +39,11 @@
   "LPD-91289": "2026-05-21",
   "LPP-64129": "2026-05-21",
   "LPP-64107": "2026-05-15",
-  "LPD-80796": "2026-05-21",
+  "LPD-80796": "2026-06-25",
   "LPD-89360": "2026-05-21",
   "LPD-90758": "2026-05-18",
   "BPR-89115": "2026-04-24",
-  "LPD-91675": "2026-05-22",
+  "LPD-91675": "2026-05-21",
   "LPD-91337": "2026-05-20",
   "LPD-91332": "2026-05-20",
   "LPD-91328": "2026-05-20",
@@ -63,53 +63,140 @@
   "LPD-90755": "2026-05-19",
   "LPD-2022": "2023-11-30",
   "LPP-64196": "2026-05-26",
-  "LPP-64194": "2026-05-26"
+  "LPP-64194": "2026-05-26",
+  "LPP-64236": "2026-06-26",
+  "LPD-96724": "2026-07-01",
+  "LPD-96723": "2026-07-01",
+  "LPD-88483": "2026-06-10",
+  "LPD-81774": "2026-06-23",
+  "LPP-64594": "2026-06-25",
+  "LPD-96829": "2026-07-02",
+  "LPD-96828": "2026-07-02",
+  "LPD-96825": "2026-07-02",
+  "LPD-96824": "2026-07-02"
 }
 ```
 
 ## State Snapshot
 ```json
 {
-  "date": "2026-06-03",
+  "date": "2026-07-06",
   "issues": {
-    "BPR-89115": {"status": "Original Fix Committed", "assignee": "PT User Headless"},
-    "BPR-88743": {"status": "In Progress", "assignee": "Jorge González"},
-    "LPP-63853": {"status": "In Analysis", "assignee": "Petteri Karttunen"},
-    "LPP-63904": {"status": "Solution Proposed", "assignee": "PT User Headless"},
-    "LPP-63022": {"status": "Solution Proposed", "assignee": "Gábor Komáromi"},
-    "LPP-64007": {"status": "Pending", "assignee": "Gábor Komáromi"},
-    "LPP-64038": {"status": "In Progress", "assignee": "Vendel Töreki"},
-    "LPP-64107": {"status": "Pending", "assignee": "Gábor Komáromi"},
-    "LPP-64129": {"status": "In Queue", "assignee": "PT User Headless"},
-    "LPP-64021": {"status": "In Queue", "assignee": "PT User Headless"},
-    "LPP-64016": {"status": "In Queue", "assignee": "PT User Headless"},
-    "LPP-64013": {"status": "In Queue", "assignee": "PT User Headless"},
-    "LPD-82108": {"status": "In Development", "assignee": "Carlos Correa García"},
-    "LPD-68461": {"status": "In Development", "assignee": "Magdalena Jedraszak"},
-    "LPD-65084": {"status": "In Development", "assignee": "Petteri Karttunen"},
-    "LPD-88482": {"status": "In Development", "assignee": "Jose Luis Navarro"},
-    "LPD-91090": {"status": "In Development", "assignee": "Jose Luis Navarro"},
-    "LPD-75473": {"status": "In Progress", "assignee": "Magdalena Jedraszak"},
-    "LPD-88685": {"status": "In Progress", "assignee": "Beni Herrero Lorenzo"},
-    "LPD-89990": {"status": "In Progress", "assignee": "Alejandro Tardín"},
-    "LPD-90091": {"status": "In Progress", "assignee": "Jorge González"},
-    "LPD-86122": {"status": "In Progress", "assignee": "Jaime León Rosado"},
-    "LPD-91289": {"status": "In Progress", "assignee": "Alejandro Tardín"},
-    "LPD-80796": {"status": "In Review", "assignee": "PT User Core Infrastructure"},
-    "LPD-90347": {"status": "In Review", "assignee": "PT User Headless"},
-    "LPD-89806": {"status": "In Review", "assignee": "Vendel Töreki"},
-    "LPD-90758": {"status": "In Review", "assignee": "Alejandro Tardín"},
-    "LPD-76859": {"status": "Selected for Development", "assignee": "PT User Headless"},
-    "LPD-86845": {"status": "Selected for Development", "assignee": "Daniel Raposo Sánchez"},
-    "LPD-88483": {"status": "Ready for Development", "assignee": "PT User Headless"},
-    "LPD-87031": {"status": "Open", "assignee": "PT User Headless"},
-    "LPD-86888": {"status": "Open", "assignee": "Beni Herrero Lorenzo"},
-    "LPD-86844": {"status": "Open", "assignee": "Jaime León Rosado"},
-    "LPD-82310": {"status": "Open", "assignee": "PT User Headless"},
-    "LPD-78893": {"status": "Open", "assignee": "PT User Headless"},
-    "LPD-78891": {"status": "Open", "assignee": "PT User Headless"},
-    "LPD-81774": {"status": "In Design", "assignee": "PT User Headless"},
-    "LPD-89360": {"status": "Selected for Development", "assignee": "Vendel Töreki"}
+    "LPD-88483": {
+      "status": "in development",
+      "assignee": "Jorge González",
+      "last_action_date": "2026-07-03"
+    },
+    "LPD-81774": {
+      "status": "in development",
+      "assignee": "Alejandro Tardín",
+      "last_action_date": "2026-07-03"
+    },
+    "LPD-91090": {
+      "status": "in development",
+      "assignee": "Alberto Moreno Lage",
+      "last_action_date": "2026-07-03"
+    },
+    "LPP-64176": {
+      "status": "pending",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-06-09"
+    },
+    "LPP-64175": {
+      "status": "pending",
+      "assignee": "Vendel Töreki",
+      "last_action_date": "2026-07-06"
+    },
+    "LPP-64236": {
+      "status": "in analysis",
+      "assignee": "Vendel Töreki",
+      "last_action_date": "2026-07-06"
+    },
+    "LPP-64594": {
+      "status": "pending",
+      "assignee": "Alberto Moreno Lage",
+      "last_action_date": "2026-07-01"
+    },
+    "LPP-64688": {
+      "status": "in analysis",
+      "assignee": "Alberto Moreno Lage",
+      "last_action_date": "2026-07-06"
+    },
+    "LPD-96724": {
+      "status": "in development",
+      "assignee": "Alejandro Tardín",
+      "last_action_date": "2026-07-01"
+    },
+    "LPP-64657": {
+      "status": "in queue",
+      "assignee": "Magdalena Jedraszak",
+      "last_action_date": "2026-07-06"
+    },
+    "LPD-97197": {
+      "status": "open",
+      "assignee": "Magdalena Jedraszak",
+      "last_action_date": "2026-07-05"
+    },
+    "LPD-94863": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-06-15"
+    },
+    "LPD-89751": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-05-12"
+    },
+    "LPD-87031": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-04-22"
+    },
+    "LPD-96945": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-07-02"
+    },
+    "LPP-64653": {
+      "status": "in queue",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-07-01"
+    },
+    "LPP-64669": {
+      "status": "in queue",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-07-01"
+    },
+    "BPR-90841": {
+      "status": "original fix committed",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-07-03"
+    },
+    "BPR-90840": {
+      "status": "original fix committed",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-07-03"
+    },
+    "BPR-90540": {
+      "status": "original fix committed",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-06-30"
+    },
+    "BPR-90539": {
+      "status": "original fix committed",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-06-30"
+    },
+    "LPD-95413": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-06-19"
+    },
+    "LPD-86915": {
+      "status": "open",
+      "assignee": "PT User Headless",
+      "last_action_date": "2026-04-21"
+    }
   }
 }
 ```
@@ -117,12 +204,22 @@
 ## Testing Panel Baseline
 ```json
 {
-  "date": "2026-06-03",
-  "investigation": 115,
-  "acceptance": 24,
-  "all_bugs": 186,
-  "fp4_fp5": 2,
-  "no_fp": 13
+  "date": "2026-07-06",
+  "investigation": {
+    "count": 217
+  },
+  "acceptance": {
+    "count": 38
+  },
+  "all_bugs": {
+    "count": 193
+  },
+  "fp4_fp5": {
+    "count": 1
+  },
+  "no_fp": {
+    "count": 3
+  }
 }
 ```
 
@@ -142,7 +239,9 @@
   "Nóra Szél": "5e6106446e8fdd0cd81750e3",
   "Jorge González": "605242d9009fee00693ade38",
   "Alberto Moreno Lage": "64198a787222b08f3e722b76",
-  "Carlos Correa García": "62050b847334070067553c44"
+  "Carlos Correa García": "62050b847334070067553c44",
+  "Eric Yan": "5af5e314d1d9445cd3a5e6a0",
+  "Antonio Jimeno Cordero": "631866029796033b256d9338"
 }
 ```
 
@@ -154,10 +253,37 @@
 }
 ```
 
+## Team GitHub Logins
+```json
+{
+  "Alejandro Tardín": "4lejandrito",
+  "Pablo Agulla": "pablo-agulla",
+  "Nóra Szél": "noraszel",
+  "Beni Herrero Lorenzo": "beni-the-po",
+  "Bruno Fernández González": "brunofernandezg",
+  "Alberto Moreno Lage": "albertojml",
+  "Carlos Correa García": "ccorreagg",
+  "Daniel Raposo Sánchez": "dannielraposo",
+  "Gábor Komáromi": "GaborKomaromi",
+  "Jaime León Rosado": "jaimelr10",
+  "Jorge González": "boton",
+  "Magdalena Jedraszak": "magjed4289",
+  "Jose Luis Navarro": "joseluisnavarro2025",
+  "Petteri Karttunen": "peerkar",
+  "Vendel Töreki": "vendeltoreki",
+  "Lfbesada (confirmed Headless contributor 2026-07-03)": "lfbesada"
+}
+```
+
 ## PR Snapshot
 ```json
 {
-  "date": "2026-06-01",
-  "prs": {}
+  "date": "2026-07-06",
+  "prs": {
+    "3851": "open",
+    "3994": "open",
+    "3986": "open",
+    "3989": "open"
+  }
 }
 ```
