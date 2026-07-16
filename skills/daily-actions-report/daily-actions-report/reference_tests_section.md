@@ -1,31 +1,41 @@
-# Testing Panel Baseline
+# Test Section (static)
 
-Persistent reference for Testing Panel counts. Updated after each run where numeric counts are available. Survives sprint transitions — do not reset this file when starting a new sprint, only update it when new counts are fetched.
+**2026-07-09 (per Nóra):** the Daily Actions Report's Test section no longer
+tracks a live Testray/Jira baseline. This file used to hold the "Testing
+Panel Baseline" — a persisted `{investigation, acceptance, all_bugs, fp4_fp5,
+no_fp}` count fetched fresh every run via a Testray screenshot (Chrome MCP)
+and a browser-JS Jira filter fetch, then diffed against the previous run to
+show deltas. That entire pipeline has been removed.
 
-## Current Baseline
-```json
-{
-  "date": "2026-06-02",
-  "investigation": 101,
-  "acceptance": 18,
-  "all_bugs": 183,
-  "fp4_fp5": 2,
-  "no_fp": 10
-}
-```
+## What replaced it
 
-## Sources
-- Investigation → Testray whole run, latest [master] ci:test:headless build — **Failed** count
-  Routine: `https://testray.liferay.com/web/testray#/project/35392/routines/994140`
-- Acceptance → Testray acceptance build, latest EE Development Acceptance (master), filtered by Headless team — **Failed** count
-  Routine: `https://testray.liferay.com/web/testray#/project/35392/routines/994140`
-- All bugs → `https://liferay.atlassian.net/issues/?filter=15065`
-- FP4/FP5 → `https://liferay.atlassian.net/issues/?filter=45383`
-- No FP → `https://liferay.atlassian.net/issues/?filter=45384`
+The Test section is now a static Confluence **Include Page** macro that
+transcludes a dedicated page:
 
-## How to fetch
-- **Investigation & Acceptance**: Navigate to each Testray build page via Chrome MCP, take a screenshot, read the Failed count from the "Total test cases" chart.
-- **All bugs, FP4/FP5, No FP**: Browser JS fetch from a liferay.atlassian.net tab (see SESSION_PROMPTS.md Step 4).
+- **Page title:** `Headless Testray Regression Tracking`
+- **Space:** `ENGHEADLESS`
+- **Page ID:** `5096669324`
+- **URL:** <https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/5096669324/Headless+Testray+Regression+Tracking>
 
-## API Note
-The Jira REST API `/rest/api/3/search/jql` POST endpoint may or may not return a `total` field. The skill uses a multi-method fallback: POST with maxResults=0, then GET with maxResults=0. If both fail, `N/A (–)` is shown and the baseline is not updated. Baselines from 2026-05-18 were set manually from the published Confluence page.
+That page is maintained independently (by whoever owns the Testray
+regression-tracking process) and is out of scope for this skill. The Daily
+Actions Report just needs to reference it by title on every publish — see
+`TEST_REGRESSION_PAGE_TITLE` / `adf_include_page_macro()` /
+`_build_test_section()` in `headless_daily_report.py`, and the "Test Section"
+subsection of `SKILL.md`.
+
+## Nothing to fetch
+
+There is no counts file, no baseline, no delta, and no Chrome screenshot step
+for this section any more. Do not resurrect `testing_panel.json`,
+`--testing-panel-file`, `--no-testing-panel`, or a "Testing Panel Baseline"
+section in `project_current_sprint.md` — none of it is read by the script.
+
+## If the regression page moves or is renamed
+
+Update `TEST_REGRESSION_PAGE_TITLE` (and `TEST_REGRESSION_PAGE_URL`, used only
+for the local HTML preview link) in `headless_daily_report.py`. If it ever
+moves to a different Confluence space than `ENGHEADLESS`, the Include Page
+macro's bare-title parameter will stop resolving — `adf_include_page_macro()`
+would need a space-qualified reference at that point (not currently
+supported; extend it if this happens).

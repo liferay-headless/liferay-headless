@@ -1,14 +1,14 @@
 # Sprint Context
 
 ## Sprint Metadata
-- sprint_label: 26M3|DEV#14|Jun29-Jul10
-- sprint_field: HL26M3|DEV#14|Jun29-Jul10
-- label_dev: 26M3|DEV#14|Jun29-Jul10
-- label_dis: 26M3|DIS#14|Jun29-Jul10
-- start_date: 2026-06-29
-- end_date: 2026-07-10
+- sprint_label: 26M3|DEV#15|Jul13-Jul24
+- sprint_field: HL26M3|DEV#15|Jul13-Jul24
+- label_dev: 26M3|DEV#15|Jul13-Jul24
+- label_dis: 26M3|DIS#15|Jul13-Jul24
+- start_date: 2026-07-13
+- end_date: 2026-07-24
 - actions_report_page_id: 4899110937
-- actions_report_url: https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/4899110937/26M2+DEV+11+May18-May29+Daily+Actions+Report
+- actions_report_url: https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/4899110937/Headless+Team+Daily+Actions+Report
 - report_page_title: Headless Team — Daily Actions Report
 
 ## Changelog Cache
@@ -73,14 +73,25 @@
   "LPD-96829": "2026-07-02",
   "LPD-96828": "2026-07-02",
   "LPD-96825": "2026-07-02",
-  "LPD-96824": "2026-07-02"
+  "LPD-96824": "2026-07-02",
+  "LPP-64669": "2026-07-01",
+  "LPP-64657": "2026-07-01",
+  "LPD-97697": "2026-07-09",
+  "LPD-96693": "2026-07-02",
+  "LPP-64742": "2026-07-08",
+  "LPD-97411": "2026-07-08",
+  "LPD-96691": "2026-07-02",
+  "LPD-96499": "2026-07-07",
+  "LPD-94137": "2026-06-29",
+  "LPP-64806": "2026-07-14",
+  "LPD-98203": "2026-07-14"
 }
 ```
 
 ## State Snapshot
 ```json
 {
-  "date": "2026-07-06",
+  "date": "2026-07-15",
   "issues": {
     "LPD-88483": {
       "status": "in development",
@@ -90,107 +101,37 @@
     "LPD-81774": {
       "status": "in development",
       "assignee": "Alejandro Tardín",
-      "last_action_date": "2026-07-03"
+      "last_action_date": "2026-07-14"
     },
-    "LPD-91090": {
-      "status": "in development",
-      "assignee": "Alberto Moreno Lage",
-      "last_action_date": "2026-07-03"
+    "LPD-96499": {
+      "status": "in progress",
+      "assignee": "Jaime León Rosado",
+      "last_action_date": "2026-06-30"
     },
-    "LPP-64176": {
-      "status": "pending",
+    "LPD-97411": {
+      "status": "in review",
       "assignee": "PT User Headless",
-      "last_action_date": "2026-06-09"
+      "last_action_date": "2026-07-07"
     },
-    "LPP-64175": {
-      "status": "pending",
-      "assignee": "Vendel Töreki",
-      "last_action_date": "2026-07-06"
+    "LPP-64669": {
+      "status": "in progress",
+      "assignee": "Beni Herrero Lorenzo",
+      "last_action_date": "2026-07-14"
+    },
+    "LPP-64806": {
+      "status": "solution proposed",
+      "assignee": "Gábor Komáromi",
+      "last_action_date": "2026-07-14"
     },
     "LPP-64236": {
-      "status": "in analysis",
-      "assignee": "Vendel Töreki",
-      "last_action_date": "2026-07-06"
-    },
-    "LPP-64594": {
       "status": "pending",
-      "assignee": "Alberto Moreno Lage",
-      "last_action_date": "2026-07-01"
-    },
-    "LPP-64688": {
-      "status": "in analysis",
-      "assignee": "Alberto Moreno Lage",
-      "last_action_date": "2026-07-06"
+      "assignee": "Vendel Töreki",
+      "last_action_date": "2026-07-10"
     },
     "LPD-96724": {
       "status": "in development",
       "assignee": "Alejandro Tardín",
       "last_action_date": "2026-07-01"
-    },
-    "LPP-64657": {
-      "status": "in queue",
-      "assignee": "Magdalena Jedraszak",
-      "last_action_date": "2026-07-06"
-    },
-    "LPD-97197": {
-      "status": "open",
-      "assignee": "Magdalena Jedraszak",
-      "last_action_date": "2026-07-05"
-    },
-    "LPD-94863": {
-      "status": "open",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-06-15"
-    },
-    "LPD-89751": {
-      "status": "open",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-05-12"
-    },
-    "LPD-87031": {
-      "status": "open",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-04-22"
-    },
-    "LPD-96945": {
-      "status": "open",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-07-02"
-    },
-    "LPP-64653": {
-      "status": "in queue",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-07-01"
-    },
-    "LPP-64669": {
-      "status": "in queue",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-07-01"
-    },
-    "BPR-90841": {
-      "status": "original fix committed",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-07-03"
-    },
-    "BPR-90840": {
-      "status": "original fix committed",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-07-03"
-    },
-    "BPR-90540": {
-      "status": "original fix committed",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-06-30"
-    },
-    "BPR-90539": {
-      "status": "original fix committed",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-06-30"
-    },
-    "LPD-95413": {
-      "status": "open",
-      "assignee": "PT User Headless",
-      "last_action_date": "2026-06-19"
     },
     "LPD-86915": {
       "status": "open",
@@ -241,7 +182,8 @@
   "Alberto Moreno Lage": "64198a787222b08f3e722b76",
   "Carlos Correa García": "62050b847334070067553c44",
   "Eric Yan": "5af5e314d1d9445cd3a5e6a0",
-  "Antonio Jimeno Cordero": "631866029796033b256d9338"
+  "Antonio Jimeno Cordero": "631866029796033b256d9338",
+  "Zina Zeke": "712020:fbbb408b-a6c5-408c-8296-4a317f2eaa5f"
 }
 ```
 
@@ -271,6 +213,7 @@
   "Jose Luis Navarro": "joseluisnavarro2025",
   "Petteri Karttunen": "peerkar",
   "Vendel Töreki": "vendeltoreki",
+  "Adolfo Pérez": "adolfopa",
   "Lfbesada (confirmed Headless contributor 2026-07-03)": "lfbesada"
 }
 ```
@@ -278,12 +221,43 @@
 ## PR Snapshot
 ```json
 {
-  "date": "2026-07-06",
+  "date": "2026-07-15",
   "prs": {
-    "3851": "open",
-    "3994": "open",
-    "3986": "open",
+    "4022": "open",
+    "4021": "open",
+    "4016": "open",
     "3989": "open"
   }
+}
+```
+
+## Team Slack Names
+```json
+{
+  "Adolfo Pérez": "Adolfo Pérez",
+  "Alejandro Tardín": "Alejandro Tardín",
+  "Beni Herrero Lorenzo": "Beni Herrero",
+  "Antonio Jimeno Cordero": "Antonio Jimeno",
+  "Alberto Moreno Lage": "Alberto Moreno",
+  "Carlos Correa García": "Carlos Correa",
+  "Daniel Raposo Sánchez": "Daniel Raposo",
+  "Gábor Komáromi": "Gábor Komáromi",
+  "Jaime León Rosado": "Jaime León Rosado",
+  "Jorge González": "boton",
+  "Jose Luis Navarro": "joseluis.navarro",
+  "Magdalena Jedraszak": "Meg Jedraszak",
+  "Petteri Karttunen": "Petteri Karttunen",
+  "Vendel Töreki": "Vendel Töreki",
+  "Nóra Szél": "Nóra Szél"
+}
+```
+
+## Slack Thread Snapshot
+```json
+{
+  "date": "",
+  "channel_id": "C5E1CRLJY",
+  "channel_name": "t-dxp-headless",
+  "threads": {}
 }
 ```
