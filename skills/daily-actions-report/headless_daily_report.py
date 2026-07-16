@@ -8,8 +8,9 @@ Usage:
   python3 headless_daily_report.py --jira-data-file jira_data.json --pr-data-file pr_data.json
   python3 headless_daily_report.py --jira-data-file jira_data.json --pr-data-file pr_data.json --publish
   python3 headless_daily_report.py --jira-data-file jira_data.json --pr-data-file pr_data.json --dry-run
-  python3 headless_daily_report.py --jira-data-file jira_data.json --no-testing-panel
   python3 headless_daily_report.py --jira-data-file jira_data.json --date YYYY-MM-DD
+  python3 headless_daily_report.py --jira-data-file jira_data.json --pr-data-file pr_data.json \
+      --slack-data-file slack_data.json   # unanswered Slack threads, see assemble_slack_data.py
 
 Requirements:
   pip install requests
@@ -112,6 +113,7 @@ UGE_ORTIZ_ID = "5f86c6e78a2db000760ac740"
 
 TIER_COLORS: dict[str, tuple[str, str, str]] = {
     "PR":   ("Unplanned", "PR",                              "yellow"),
+    "SLACK": ("Unplanned", "Slack Q",                        "purple"),
     "1.1":  ("Unplanned", "Critical SEV",                    "red"),
     "1.2":  ("Unplanned", "Critical LPP",                    "red"),
     "2":    ("Planned",   "Expedite",                        "purple"),
@@ -179,18 +181,13 @@ def _jira_headers() -> dict[str, str]:
     }
 
 
-def _github_headers() -> dict[str, str]:
-    """Build Bearer-auth headers from GITHUB_TOKEN env var."""
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if not token:
-        raise RuntimeError(
-            "Missing GitHub credentials. Set GITHUB_TOKEN environment variable."
-        )
-    return {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
+# NOTE (2026-07-08, per Nóra's question "is GITHUB_TOKEN really needed?"):
+# there used to be a _github_headers()/GITHUB_TOKEN helper here for calling
+# api.github.com directly. It was never called anywhere in this file — PR
+# data collection moved to Chrome-based scraping of the authenticated PR
+# pages (see SKILL.md → "Open Pull Requests") specifically to avoid the
+# unauthenticated api.github.com rate limit, and never adopted a token-based
+# path. Removed as dead code. GITHUB_TOKEN is not required by this script.
 
 
 def jira_post_search(jql: str, fields: list[str], max_results: int = 200) -> list[dict]:
@@ -356,9 +353,16 @@ class SprintContext:
     # Caches and snapshots — mutable dicts updated after each publish
     changelog_cache: dict[str, str] = field(default_factory=dict)
     state_snapshot: dict = field(default_factory=dict)
-    testing_baseline: dict = field(default_factory=dict)
     account_ids: dict[str, str] = field(default_factory=dict)
     pr_snapshot: dict = field(default_factory=dict)
+    slack_snapshot: dict = field(default_factory=dict)
+
+    # Slack display names of the Headless team, read from the "Team Slack
+    # Names" section of project_current_sprint.md. Used by
+    # assemble_slack_data.py (not this file directly) to decide whether a
+    # thread reply counts as a team reply. Kept on SprintContext anyway so
+    # both scripts read the roster from the exact same parser/section.
+    team_slack_names: dict[str, str] = field(default_factory=dict)
 
     # GitHub logins of the Headless team, read from the "Team GitHub Logins"
     # section of project_current_sprint.md. Used to classify a PR as cross-team:
@@ -473,9 +477,9 @@ def load_sprint_context(path: Path) -> "SprintContext":
         report_page_title=metadata.get("report_page_title", ""),
         changelog_cache=json_sections.get("Changelog Cache", {}),
         state_snapshot=json_sections.get("State Snapshot", {}),
-        testing_baseline=json_sections.get("Testing Panel Baseline", {}),
         account_ids=json_sections.get("Account IDs", {}),
         pr_snapshot=json_sections.get("PR Snapshot", {}),
+        slack_snapshot=json_sections.get("Slack Thread Snapshot", {}),
     )
 
     # ── Team GitHub Logins (dedup rule 3 — cross-team PR detection) ────────────
@@ -489,6 +493,17 @@ def load_sprint_context(path: Path) -> "SprintContext":
     elif isinstance(raw_logins, list):
         logins = {str(v).strip().lower() for v in raw_logins if v}
     ctx.team_github_logins = logins
+
+    # ── Team Slack Names (Slack Needs Owner — reply-author matching) ─────────
+    # Not used by this file's own logic (assemble_slack_data.py reads it
+    # independently since it must run standalone), but parsed here too so a
+    # missing/misshapen section is caught by the same validation path other
+    # roster sections go through.
+    raw_slack_names = json_sections.get("Team Slack Names", {})
+    if isinstance(raw_slack_names, dict):
+        ctx.team_slack_names = {str(k): str(v) for k, v in raw_slack_names.items() if v}
+    elif raw_slack_names:
+        print(f"  ⚠ 'Team Slack Names' section is not a JSON object — ignoring", file=sys.stderr)
 
     return ctx
 
@@ -508,9 +523,9 @@ def save_sprint_context(ctx: SprintContext, path: Path) -> None:
     updates: dict[str, dict] = {
         "Changelog Cache":        ctx.changelog_cache,
         "State Snapshot":         ctx.state_snapshot,
-        "Testing Panel Baseline": ctx.testing_baseline,
         "Account IDs":            ctx.account_ids,
         "PR Snapshot":            ctx.pr_snapshot,
+        "Slack Thread Snapshot":  ctx.slack_snapshot,
     }
 
     def replace_json_block(text: str, section_name: str, new_data: dict) -> str:
@@ -643,6 +658,46 @@ def load_jira_data(jira_data_file: "Path | None") -> "tuple[list[dict], set[str]
           f"{len(sev_zero_day_keys)} zero-day, {len(sev_bpr_keys)} SEV BPR keys, "
           f"{len(changelogs)} pre-fetched changelogs")
     return sprint_issues, sev_keys, sev_zero_day_keys, sev_bpr_keys, changelogs
+
+
+def load_slack_data(slack_data_file: "Path | None") -> list[dict]:
+    """
+    Load already-classified unanswered Slack threads from slack_data.json,
+    produced by `assemble_slack_data.py classify` (see SKILL.md). All
+    filtering, window logic, and reply-author-vs-roster classification has
+    already happened in that script — this function only loads and
+    sanity-checks the shape. Never crashes: a missing/bad file just means no
+    Slack rows this run (same graceful-degradation style as load_jira_data).
+
+    Each entry: {permalink, title, author, created_date, age_days, reply_count}
+    """
+    print("\n[load_slack_data]")
+
+    if slack_data_file is None or not slack_data_file.exists():
+        print("  !! No Slack data file provided or file not found — skipping Slack rows.")
+        print("     Pass --slack-data-file PATH to include unanswered Slack questions.")
+        return []
+
+    print(f"  Loading Slack data from: {slack_data_file.name}")
+    try:
+        data = json.loads(slack_data_file.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"  !! Failed to read Slack data file: {exc} — skipping Slack rows.")
+        return []
+
+    if not isinstance(data, list):
+        print(f"  !! Slack data file must contain a JSON array, got {type(data).__name__} — skipping.")
+        return []
+
+    threads: list[dict] = []
+    for entry in data:
+        if not isinstance(entry, dict) or not entry.get("permalink") or not entry.get("title"):
+            print(f"  !! Skipping malformed Slack entry (needs permalink + title): {entry!r}")
+            continue
+        threads.append(entry)
+
+    print(f"  → {len(threads)} unanswered Slack thread(s)")
+    return threads
 
 
 def fetch_open_prs(ctx: "SprintContext", pr_data_file: "Path | None" = None) -> list[dict]:
@@ -1044,12 +1099,26 @@ def should_exclude(issue: dict, sev_keys: set[str], ctx: "SprintContext") -> str
         return "comba-in LPP"
 
     # ── Rule 6b: PTR not owned by Headless team ───────────────────────────────
-    # PTR issues are pulled in by the sprint filter but have no Headless team
-    # check elsewhere.  Exclude any PTR where customfield_10001 (Team) does not
-    # contain "Headless".  This mirrors the non-Headless LPD rule (Rule 5).
+    # PTR issues are pulled in by the sprint filter. A PTR is kept if EITHER:
+    #   (a) customfield_10001 (Team) contains "Headless", OR
+    #   (b) its assignee is a known Headless team member — including the
+    #       generic "PT User Headless" placeholder account, which is itself
+    #       listed in ctx.account_ids (project_current_sprint.md's Account IDs
+    #       roster), so no separate special-case is needed for it.
+    # (b) was added 2026-07-13 per Nóra, mirroring Rule 5's headless_assignee
+    # fallback for LPD: PTR-8977/PTR-8970 (assigned to Beni Herrero Lorenzo)
+    # and PTR-8999 (PT User Headless) were being wrongly excluded solely
+    # because Team was blank, even though they were clearly Headless work.
+    # A PTR already "Answered" is always excluded regardless of ownership —
+    # belt-and-suspenders even though the sprint JQL already excludes
+    # "Answered" project-wide (status not in (...,Answered)); if that filter
+    # ever changes, this still holds the line.
     if project == "PTR":
+        if status == "answered":
+            return "PTR Answered"
         headless_team = team and "Headless" in team
-        if not headless_team:
+        headless_assignee = assignee_id in ctx.account_ids.values()
+        if not (headless_team or headless_assignee):
             return "Non-Headless PTR"
 
     # ── Rule 7: BPR status exclusions ────────────────────────────────────────
@@ -1238,19 +1307,41 @@ def test_exclusion_bpr_ee_fix_pack():
 
 def test_exclusion_non_headless_ptr():
     ctx = _MockCtx()
-    # PTR with no Headless team → exclude
-    issue = _mock_issue(project="PTR", key="PTR-1", team="Portal Team", assignee_id="test-account-id")
+    # PTR with no Headless team AND assignee not on the roster → exclude
+    issue = _mock_issue(project="PTR", key="PTR-1", team="Portal Team", assignee_id="not-a-team-member-id")
     result = should_exclude(issue, set(), ctx)
     assert result == "Non-Headless PTR", f"Got {result!r}"
-    # PTR with empty team → exclude
-    issue2 = _mock_issue(project="PTR", key="PTR-2", team="", assignee_id="test-account-id")
+    # PTR with empty team AND assignee not on the roster → exclude
+    issue2 = _mock_issue(project="PTR", key="PTR-2", team="", assignee_id="not-a-team-member-id")
     result2 = should_exclude(issue2, set(), ctx)
     assert result2 == "Non-Headless PTR", f"Got {result2!r}"
-    # PTR with Headless team → keep
-    issue3 = _mock_issue(project="PTR", key="PTR-3", team="Headless Portal", assignee_id="test-account-id")
+    # PTR with Headless team (regardless of assignee) → keep
+    issue3 = _mock_issue(project="PTR", key="PTR-3", team="Headless Portal", assignee_id="not-a-team-member-id")
     result3 = should_exclude(issue3, set(), ctx)
     assert result3 is None, f"Headless PTR should be kept, got {result3!r}"
     print("  ✓ test_exclusion_non_headless_ptr")
+
+
+def test_exclusion_ptr_assignee_fallback():
+    # 2026-07-13 fix: PTR with BLANK team but assignee IS a known Headless
+    # team member → keep (this is the PTR-8977/PTR-8970/PTR-8999 case: Team
+    # field is empty, but the assignee is on the roster).
+    ctx = _MockCtx()
+    issue = _mock_issue(project="PTR", key="PTR-4", team="", assignee_id="test-account-id")
+    result = should_exclude(issue, set(), ctx)
+    assert result is None, f"PTR with roster assignee should be kept even with blank Team, got {result!r}"
+    print("  ✓ test_exclusion_ptr_assignee_fallback")
+
+
+def test_exclusion_ptr_answered():
+    # 2026-07-13: a PTR already "Answered" is always excluded, even if it
+    # would otherwise be kept by the Team/assignee checks — belt-and-
+    # suspenders on top of the sprint JQL's own Answered exclusion.
+    ctx = _MockCtx()
+    issue = _mock_issue(project="PTR", key="PTR-5", status="answered", team="Headless Portal", assignee_id="test-account-id")
+    result = should_exclude(issue, set(), ctx)
+    assert result == "PTR Answered", f"Got {result!r}"
+    print("  ✓ test_exclusion_ptr_answered")
 
 
 def run_exclusion_tests():
@@ -1266,6 +1357,8 @@ def run_exclusion_tests():
     test_exclusion_bpr_statuses()
     test_exclusion_bpr_ee_fix_pack()
     test_exclusion_non_headless_ptr()
+    test_exclusion_ptr_assignee_fallback()
+    test_exclusion_ptr_answered()
     print("  All exclusion tests passed ✓\n")
 
 
@@ -1714,15 +1807,27 @@ def get_first_active_date(issue: dict, ctx: "SprintContext") -> str | None:
 
     Project-specific logic
     ──────────────────────
-    LPD : most-recent transition TO "In Development" or "In Progress"
-          (scan reversed changelog — first match in reverse order is the latest)
+    LPD : "in development"/"in progress" → most-recent transition TO either
+          (scan reversed changelog — first match in reverse order is the
+          latest). Any OTHER LPD Section-1 status (in review, escalated, in
+          product review, ready for product review) → most-recent transition
+          TO that same current status instead (2026-07-13 per Nóra) — a
+          different number representing time in the CURRENT phase, not time
+          since development started. Permitted fallback to issue["created"]
+          ONLY for this "other status" case, if no matching transition exists.
     LPP : earliest transition TO "In Queue"
           permitted fallback: issue["created"][:10] if no transition found
     BPR : earliest transition TO any status after "Original Fix Committed"
           (i.e. in _BPR_POST_OFC_STATUSES)
+    PTR : always issue["created"][:10] (2026-07-13 per Nóra) — "days open,
+          from open until Answered" — no changelog scan needed; Rule 6b
+          already filters out "Answered" PTRs before this is ever called.
 
     CRITICAL: never write today's date, the run date, or issue["created"] for
-    LPD or BPR.  The only permitted fallback is LPP → issue.created.
+    LPD's "in development"/"in progress" case or for BPR. Permitted fallbacks
+    to issue.created are: LPP always, PTR always, and LPD's "other status"
+    case (in review/escalated/in product review/ready for product review)
+    when no matching transition is found.
     """
     key = issue["key"]
     project = issue["project"]
@@ -1733,6 +1838,14 @@ def get_first_active_date(issue: dict, ctx: "SprintContext") -> str | None:
     # ── Cache invalidation check for LPD ─────────────────────────────────────
     need_fetch = False
     if cached is None:
+        need_fetch = True
+    elif project == "LPD" and status not in _LPD_ACTIVE_STATUSES:
+        # 2026-07-13 per Nóra: LPD issues past development (in review,
+        # escalated, in product review, ready for product review) track days
+        # in their CURRENT status, which changes every time status changes.
+        # Never trust a cached value here — always recompute from the
+        # changelog so a stale date left over from a previous phase (e.g.
+        # "in progress") doesn't get mislabeled as this phase's entry date.
         need_fetch = True
     elif (
         project == "LPD"
@@ -1766,12 +1879,32 @@ def get_first_active_date(issue: dict, ctx: "SprintContext") -> str | None:
             raw = jira_get_issue(key, expand="changelog")
         except Exception as exc:
             print(f"    WARNING: changelog fetch failed for {key}: {exc}")
+            # 2026-07-08 (per Nóra): for LPP only, fall back to issue["created"]
+            # on a fetch failure — the same permitted fallback already used
+            # below when the changelog is fetched successfully but contains no
+            # "In Queue" transition. Without this, a proxy-blocked HTTPS call
+            # (common in the sandbox) silently dropped the Days-in-Progress
+            # number for that LPP instead of showing a real day count.
+            # LPD/BPR must NOT get this fallback (see docstring) — for those,
+            # still return None so the caller can flag it as a genuine
+            # fetch failure rather than fabricate a date.
+            if project == "LPP":
+                result = issue["created"][:10]
+                print(f"    {key}: LPP changelog fetch failed — falling back to created={result}")
+                ctx.changelog_cache[key] = result
+                return result
             # Do not write anything to cache — leave for retry next run
             return None
         histories = (raw.get("changelog") or {}).get("histories") or []
 
-    # ── LPD: most-recent transition to In Development / In Progress ───────────
+    # ── LPD: most-recent transition into the issue's current active phase ────
+    # For "in development"/"in progress" this is unchanged: total time since
+    # development began. 2026-07-13 per Nóra: for any OTHER LPD Section-1
+    # status (in review, escalated, in product review, ready for product
+    # review), track time in THAT status instead — e.g. "3d in review", not
+    # "3d in progress" carried over from when development started.
     if project == "LPD":
+        target_statuses = _LPD_ACTIVE_STATUSES if status in _LPD_ACTIVE_STATUSES else {status}
         result = None
         # Scan in reverse to find the latest qualifying transition
         for history in reversed(histories):
@@ -1779,15 +1912,24 @@ def get_first_active_date(issue: dict, ctx: "SprintContext") -> str | None:
             for item in (history.get("items") or []):
                 if item.get("field", "").lower() == "status":
                     to_val = (item.get("toString") or "").lower()
-                    if to_val in _LPD_ACTIVE_STATUSES:
+                    if to_val in target_statuses:
                         result = created_str
                         break  # first match in reverse = most recent
             if result:
                 break
 
+        if result is None and status not in _LPD_ACTIVE_STATUSES:
+            # Permitted fallback for the "current status phase" case only —
+            # the issue may have been created directly into this status, or
+            # arrived via a bulk/automation transition not captured as a
+            # simple 'status' changelog item. Mirrors the LPP/PTR created
+            # fallback below; LPD's "in development/in progress" case still
+            # never falls back to created (see CRITICAL note above).
+            result = issue["created"][:10] if issue.get("created") else None
+
         stored = result if result else _NO_TRANSITION
         ctx.changelog_cache[key] = stored
-        print(f"    {key}: LPD first_active_date = {stored}")
+        print(f"    {key}: LPD first_active_date ({status}) = {stored}")
         return stored
 
     # ── LPP: earliest transition to In Queue ─────────────────────────────────
@@ -1833,6 +1975,21 @@ def get_first_active_date(issue: dict, ctx: "SprintContext") -> str | None:
         print(f"    {key}: BPR first_active_date = {stored}")
         return stored
 
+    # ── PTR: days open (from creation) — 2026-07-13 per Nóra ─────────────────
+    # PTRs don't have a clean single "work started" transition the way LPD/
+    # LPP/BPR do (they bounce between Open / Awaiting Response From Team /
+    # In Progress / etc. as different teams pick them up). Nóra wants the
+    # simpler "how long has this been open, from open until Answered"
+    # framing, so — like LPP — this always falls back to issue["created"];
+    # no changelog scan needed. (Rule 6b already excludes "Answered" PTRs
+    # entirely, so a PTR reaching this point is, by definition, still open.)
+    if project == "PTR":
+        result = issue["created"][:10] if issue.get("created") else None
+        stored = result if result else _NO_TRANSITION
+        ctx.changelog_cache[key] = stored
+        print(f"    {key}: PTR first_active_date (created) = {stored}")
+        return stored
+
     # ── Unknown project — return None without writing to cache ────────────────
     print(f"    {key}: unknown project {project!r} — skipping cache write")
     return None
@@ -1844,15 +2001,30 @@ def compute_days_active_cell(issue: dict, first_active_date: str | None) -> str:
 
     Rules per project:
       LPD, date found : "{N}d in progress ({tshirt}) 🟠/🔴"  (emoji only if crossed)
-      LPD, NO_TRANSITION: "{Status}" (status name only — no number)
+      LPD, NO_TRANSITION: "{Status}" (status name only — no number; genuine:
+                           the changelog was checked and no qualifying
+                           transition exists)
       LPP, date found : "{N}d in progress 🟠/🔴"
       BPR, date found : "{N}d in progress"
       BPR, NO_TRANSITION: "{Status}"
+      Any project, first_active_date is None: "{Status} (days unknown —
+                           changelog unavailable)" — this means the changelog
+                           fetch itself failed (e.g. proxy-blocked HTTPS in
+                           the sandbox), NOT that there was genuinely no
+                           transition. Distinct from NO_TRANSITION so a fetch
+                           failure is visibly different from normal status.
       PR standalone   : "PR · {N}d open"   (caller passes open_days as int via
                          a synthetic first_active_date — see compute_pr_days_cell)
 
     Threshold comparisons use strict >  (">2d" means days > 2, i.e. ≥ 3).
     Red takes precedence over orange.
+
+    2026-07-08 (per Nóra): previously None (fetch failure) and _NO_TRANSITION
+    (genuine no-transition-found) were both rendered identically as the bare
+    status name, which silently hid real changelog-fetch failures — a row
+    would just look normal with no days number and no indication why. Now
+    only _NO_TRANSITION renders as the bare status; None renders with an
+    explicit "(days unknown — changelog unavailable)" suffix.
     """
     project = issue.get("project", "")
     tshirt = issue.get("tshirt", "")
@@ -1865,9 +2037,17 @@ def compute_days_active_cell(issue: dict, first_active_date: str | None) -> str:
         except ValueError:
             return 0
 
-    # NO_TRANSITION or None → show status name only
+    status_text = issue.get("status_raw", issue.get("status", ""))
+
+    # None → changelog fetch genuinely failed; flag it visibly instead of
+    # silently rendering the same as a real "no transition" case.
+    if first_active_date is None:
+        return f"{status_text} (days unknown — changelog unavailable)"
+
+    # NO_TRANSITION → changelog was checked, no qualifying transition exists.
+    # This is a legitimate, expected state — show status name only.
     if not first_active_date or first_active_date == _NO_TRANSITION:
-        return issue.get("status_raw", issue.get("status", ""))
+        return status_text
 
     days = _days_since(first_active_date)
 
@@ -1883,7 +2063,15 @@ def compute_days_active_cell(issue: dict, first_active_date: str | None) -> str:
             emoji = " 🟠"
 
         size_part = f" ({tshirt})" if tshirt else ""
-        return f"{days}d in progress{size_part}{emoji}"
+        status_lc = issue.get("status", "")
+        if status_lc in _LPD_ACTIVE_STATUSES:
+            return f"{days}d in progress{size_part}{emoji}"
+        # 2026-07-13 per Nóra: LPD issues past development (in review,
+        # escalated, in product review, ready for product review) show days
+        # in THEIR CURRENT status — first_active_date here is the
+        # current-status transition date (see get_first_active_date), not
+        # the development-start date, so the label must match what's counted.
+        return f"{days}d {status_lc}{size_part}{emoji}"
 
     if project == "LPP":
         # LPP Days in Progress = days since creation (not first_active_date)
@@ -1896,6 +2084,12 @@ def compute_days_active_cell(issue: dict, first_active_date: str | None) -> str:
         return f"{lpp_days}d in progress{emoji}"
 
     if project == "BPR":
+        return f"{days}d in progress"
+
+    if project == "PTR":
+        # 2026-07-13 per Nóra: days open, from open until Answered (first_active_date
+        # is issue["created"] — see get_first_active_date). Answered PTRs never
+        # reach here at all (Rule 6b excludes them before classification).
         return f"{days}d in progress"
 
     # Fallback for any other project
@@ -2065,7 +2259,7 @@ def evaluate_triggers(
     """
     Evaluate all Section 1 triggers for the issue.
     Returns a list of (trigger_number, action_text) tuples for every trigger
-    that fires.  The caller joins them with ' · '.
+    that fires.  The caller (build_action_text) joins them one per line.
 
     Parameters
     ──────────
@@ -2215,12 +2409,17 @@ def evaluate_triggers(
         orange_t = LPD_ORANGE_THRESHOLD.get(size, LPD_ORANGE_THRESHOLD[""])
         red_t = LPD_RED_THRESHOLD.get(size, LPD_RED_THRESHOLD[""])
 
-        if days_active > red_t:
+        # 2026-07-13 per Nóra: days_active measures "days in development"
+        # only while status is in development/in progress; for any other LPD
+        # Section-1 status (in review, escalated, in product review, ready
+        # for product review) it measures days in THAT current status
+        # instead (see get_first_active_date) — label the trigger text to
+        # match so a stale in-review issue isn't misreported as "in development".
+        phase_label = "in development" if status in _LPD_ACTIVE_STATUSES else status
+
+        if days_active > red_t or days_active > orange_t:
             size_part = f" ({tshirt})" if tshirt else ""
-            results.append((7, f"{days_active}d in development{size_part} — check for blockers"))
-        elif days_active > orange_t:
-            size_part = f" ({tshirt})" if tshirt else ""
-            results.append((7, f"{days_active}d in development{size_part} — check for blockers"))
+            results.append((7, f"{days_active}d {phase_label}{size_part} — check for blockers"))
 
     # ── Trigger 7b: LPP over orange/red threshold (2026-07-07, requested by Nóra) ──
     # Previously LPP threshold info was shown ONLY in the Days column, which
@@ -2291,12 +2490,15 @@ def _evaluate_pr_trigger(pr: dict, issue: dict) -> list[str]:
     Evaluate Trigger 5 for a single PR attached to an issue.
     Returns a list of action text strings (usually 0 or 1 item).
 
-    PR action text (non-standalone):
-      No reviewer, open >1d   : "PR#{N} — no reviewer assigned; sender must assign reviewer and update ticket"
-      Reviewer idle >1d       : "PR#{N} — waiting for review from {reviewer} ({N}d)"
-      Changes requested >1d   : "PR#{N} — {author} needs to address review comments ({N}d)"
-      Subtask PR prefix       : "PR#{N} (subtask {KEY}) — ..."
-      LPP→LPD fix PR prefix   : "PR#{N} (LPD-XXXXX) — ..."
+    PR action text (non-standalone) — 2026-07-08 (per Nóra): descriptive text
+    comes FIRST and the PR reference link comes LAST, so the instruction (what
+    to do) has visual priority over the reference when scanning the Action
+    column:
+      No reviewer, open >1d   : "No reviewer assigned — PR#{N}"
+      Reviewer idle >1d       : "Waiting for review from {reviewer} ({N}d) — PR#{N}"
+      Changes requested >1d   : "Changes requested by {author} — author must address ({N}d) — PR#{N}"
+      Subtask PR suffix       : "... — PR#{N} (subtask {KEY})"
+      LPP→LPD fix PR suffix   : "... — PR#{N} (LPD-XXXXX)"
     """
     pr_number = pr.get("pr_number", "?")
     author = pr.get("author", "")
@@ -2308,26 +2510,26 @@ def _evaluate_pr_trigger(pr: dict, issue: dict) -> list[str]:
 
     texts: list[str] = []
 
-    # Build prefix for subtask or LPP→LPD fix PRs
-    prefix = f"PR#{pr_number}"
+    # Build the PR reference suffix for subtask or LPP→LPD fix PRs
+    suffix = f"PR#{pr_number}"
     if jira_key and jira_key != issue.get("key", "") and jira_key.startswith("LPD-"):
         # PR linked to a subtask/Technical Task
-        prefix = f"PR#{pr_number} (subtask {jira_key})"
+        suffix = f"PR#{pr_number} (subtask {jira_key})"
     elif lpp_fix_key:
-        prefix = f"PR#{pr_number} ({lpp_fix_key})"
+        suffix = f"PR#{pr_number} ({lpp_fix_key})"
 
     # All open PRs always appear — no open_days threshold suppression.
     if not reviewer:
         texts.append(
-            f"{prefix} — no reviewer assigned"
+            f"No reviewer assigned — {suffix}"
         )
     elif reviewer_status.upper() == "CHANGES_REQUESTED":
         texts.append(
-            f"{prefix} — changes requested by {reviewer} — author must address ({open_days}d)"
+            f"Changes requested by {reviewer} — author must address ({open_days}d) — {suffix}"
         )
     elif reviewer_status.upper() in ("", "COMMENTED", "PENDING"):
         texts.append(
-            f"{prefix} — waiting for review from {reviewer} ({open_days}d)"
+            f"Waiting for review from {reviewer} ({open_days}d) — {suffix}"
         )
     # APPROVED → no action needed; don't emit trigger text
 
@@ -2380,9 +2582,11 @@ def _evaluate_standalone_pr_trigger(pr: dict) -> str:
 
     # Dedup rule 3: flag cross-team review requests so the Headless team knows
     # this PR comes from another team and only needs a review.
+    # 2026-07-08 (per Nóra): each item gets its own line (was joined with
+    # " · ") for visibility in the Action column.
     if pr.get("_cross_team"):
         flag = f"⚠️ Cross-team review request from {author}" if author else "⚠️ Cross-team review request"
-        return f"{flag} · {base}" if base else flag
+        return f"{flag}\n\n{base}" if base else flag
     return base
 
 
@@ -2394,14 +2598,20 @@ def build_action_text(
     """
     Assemble the full Section 1 Action cell text string.
 
-    PR trigger texts (trigger 5) are placed first, followed by a double-newline
-    separator, then the remaining action texts joined by ' · '.
+    2026-07-08 (per Nóra): every action item gets its own line, and within
+    each item the descriptive text comes first with any Jira/PR reference
+    link last — so the instruction is what stands out when scanning the
+    column, not the reference.
 
-    The '\n\n' separator is rendered as <br><br> in HTML and as a paragraph
-    break in ADF, giving a visual blank line between PR status and issue status.
+    PR trigger texts (trigger 5) are placed first, since acting on an open PR
+    is usually the most time-sensitive item, followed by the remaining
+    triggers, then the Fix/Heat lines (LPP rows). Items are joined with
+    '\n\n', which is rendered as a paragraph break in ADF and as <br><br> in
+    the HTML preview — i.e. one action per line.
 
-    Append ' · Fix: {LPD-KEY}' for each LPP fix link (LPP rows only).
-    Append ' · Heat: {score}' if heat_score has a value (all LPP rows).
+    'Fix: {LPD-KEY}' is added for each LPP fix link (LPP rows only) — text
+    first, link last, matching the PR trigger convention.
+    'Heat: {score}' is added if heat_score has a value (all LPP rows).
 
     Note: actual ADF inlineCard conversion of Jira keys and PR references
     happens in the ADF builder (Chunk 9) — this function returns plain text.
@@ -2409,24 +2619,20 @@ def build_action_text(
     pr_parts: list[str] = [text for (n, text) in triggers if n == 5]
     other_parts: list[str] = [text for (n, text) in triggers if n != 5]
 
-    # LPP fix links
+    # LPP fix links — text ("Fix:") first, link last
     if lpp_fix_keys:
         for fix_key in lpp_fix_keys:
             if fix_key:
                 other_parts.append(f"Fix: {fix_key}")
 
-    # Heat score (LPP rows)
+    # Heat score (LPP rows) — no link involved
     if issue.get("project") == "LPP":
         heat = issue.get("heat_score", "")
         if heat:
             other_parts.append(f"Heat: {heat}")
 
-    pr_str = " · ".join(pr_parts)
-    other_str = " · ".join(other_parts)
-
-    if pr_str and other_str:
-        return f"{pr_str}\n\n{other_str}"
-    return pr_str or other_str
+    all_parts = pr_parts + other_parts
+    return "\n\n".join(all_parts)
 
 
 def build_section2_action(issue: dict) -> str:
@@ -2478,15 +2684,12 @@ def build_section2_action(issue: dict) -> str:
 #     "section1":  [row, ...],   # sorted: standalone PR rows first, then issues by tier
 #     "section2a": [row, ...],
 #     "section2b": [row, ...],
-#     "testing_panel": {
-#       "date": "YYYY-MM-DD",
-#       "investigation": {"count": int|None, "delta": int|None},
-#       "acceptance":    {"count": int|None, "delta": int|None},
-#       "all_bugs":      {"count": int|None, "delta": int|None},
-#       "fp4_fp5":       {"count": int|None, "delta": int|None},
-#       "no_fp":         {"count": int|None, "delta": int|None},
-#     }
 #   }
+#
+# There is no "testing_panel" key any more (removed 2026-07-09). The Test
+# section is now a static Confluence "Include Page" macro (see
+# TEST_REGRESSION_PAGE_TITLE / _build_test_section below) — it needs no data
+# collection and is identical on every run.
 #
 # Each row dict:
 #   {
@@ -2579,6 +2782,49 @@ def adf_heading(text: str, level: int) -> dict:
 def adf_rule() -> dict:
     """Horizontal rule (thematic break)."""
     return {"type": "rule"}
+
+
+def adf_extension(extension_key: str, extension_type: str, parameters: dict, layout: str = "default") -> dict:
+    """
+    Confluence macro/extension block node (e.g. the "Include Page" macro).
+    Generates a fresh localId on every call — never reuse a localId.
+    """
+    return {
+        "type": "extension",
+        "attrs": {
+            "layout": layout,
+            "extensionType": extension_type,
+            "extensionKey": extension_key,
+            "parameters": parameters,
+            "localId": str(uuid.uuid4()),
+        },
+    }
+
+
+def adf_include_page_macro(page_title: str) -> dict:
+    """
+    ADF node for Confluence's "Include Page" macro, referencing a page by
+    title WITHIN THE SAME SPACE as the page this document is published to
+    (there is no space qualifier in this parameter shape — Confluence
+    resolves the title against the current page's space). The Daily Actions
+    Report always publishes into ENGHEADLESS, and the included regression
+    page also lives in ENGHEADLESS, so a bare title is sufficient.
+
+    macroId is a fresh random identifier on every build — Confluence does not
+    require it to match a pre-registered value for this macro.
+    """
+    return adf_extension(
+        extension_key="include",
+        extension_type="com.atlassian.confluence.macro.core",
+        parameters={
+            "macroParams": {"": {"value": page_title}},
+            "macroMetadata": {
+                "macroId": {"value": uuid.uuid4().hex + uuid.uuid4().hex},
+                "schemaVersion": {"value": "1"},
+                "title": "Include Page",
+            },
+        },
+    )
 
 
 def adf_bullet_list(*items) -> dict:
@@ -2711,6 +2957,19 @@ def build_pr_cell(pr_number: int, colwidth: int | None = None) -> dict:
     return adf_table_cell(adf_paragraph(adf_inline_card(url)), colwidth=colwidth)
 
 
+def build_slack_cell(permalink: str, colwidth: int | None = None) -> dict:
+    """
+    Builds the Issue/PR column cell for a Slack "Needs Owner" row.
+    inlineCard with the Slack permalink — satisfies validate_adf's rule that
+    every data row's 3rd cell must be an inlineCard, same as issue/PR rows.
+    Confluence may or may not be able to unfurl a Slack URL into a rich
+    preview depending on workspace settings; either way it renders as a
+    working link. The human-readable title lives in the Topic cell instead
+    of relying on the card to show it.
+    """
+    return adf_table_cell(adf_paragraph(adf_inline_card(permalink)), colwidth=colwidth)
+
+
 def build_assignee_cell(assignee_name: str, assignee_id: str, account_ids: dict, colwidth: int | None = None) -> dict:
     """
     Builds the Assignee table cell.
@@ -2826,6 +3085,19 @@ def _build_data_row(row: dict, account_ids: dict) -> dict:
         assignee_cell = adf_table_cell(adf_paragraph(adf_text(author or "—")), colwidth=w_assignee)
         days_cell     = build_days_cell(days_cell_text, colwidth=w_days)
         action_cell   = build_action_cell(action_text, colwidth=w_action)
+    elif row.get("type") == "slack":
+        # Unanswered Slack thread row (see assemble_slack_data.py)
+        slack = row["slack"]
+        permalink = slack.get("permalink", "")
+        title = slack.get("title", "")
+        author = slack.get("author", "")
+
+        priority_cell = build_priority_cell("SLACK", colwidth=w_priority)
+        topic_cell    = adf_table_cell(adf_paragraph(adf_text(title)), colwidth=w_topic)
+        issue_cell    = build_slack_cell(permalink, colwidth=w_issue)
+        assignee_cell = adf_table_cell(adf_paragraph(adf_text(author or "—")), colwidth=w_assignee)
+        days_cell     = build_days_cell(days_cell_text, colwidth=w_days)
+        action_cell   = build_action_cell(action_text, colwidth=w_action)
     else:
         # Regular issue row
         issue = row["issue"]
@@ -2861,84 +3133,38 @@ def _build_section_table(rows: list[dict], days_label: str, account_ids: dict) -
     return adf_table(*table_rows)
 
 
-# ── Testing panel ─────────────────────────────────────────────────────────────
+# ── Test section (static — 2026-07-09) ────────────────────────────────────────
+# Previously this section ran a live Testray scrape (Investigation/Acceptance
+# Failed counts via Chrome MCP screenshot) plus three Jira filter counts via
+# browser JS, every single day. That entire pipeline (Testray run, browser JS
+# bug counts, baseline deltas) has been removed per Nóra: 2026-07-09.
+#
+# The regression/testing data now lives on its own Confluence page —
+# "Headless Testray Regression Tracking" (ENGHEADLESS space, page id
+# 5096669324) — maintained independently of this report. The Test section
+# here is just a Confluence "Include Page" macro transcluding that page, so
+# it always shows whatever is current there with ZERO data collection on
+# every daily run.
+TEST_REGRESSION_PAGE_TITLE = "Headless Testray Regression Tracking"
+TEST_REGRESSION_PAGE_URL = (
+    "https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/5096669324/"
+    "Headless+Testray+Regression+Tracking"
+)
 
-# Canonical filter order — never change the order or URLs.
-# investigation and acceptance link to Testray (Failed count from the two latest builds).
-# all_bugs, fp4_fp5, no_fp link to Jira filters.
-_TESTING_FILTERS = [
-    ("investigation", "Investigation", "https://testray.liferay.com/web/testray#/project/35392/routines/994140"),
-    ("acceptance",    "Acceptance",    "https://testray.liferay.com/web/testray#/project/35392/routines/994140"),
-    ("all_bugs",      "All bugs",      "https://liferay.atlassian.net/issues/?filter=15065"),
-    ("fp4_fp5",       "FP4/FP5",       "https://liferay.atlassian.net/issues/?filter=45383"),
-    ("no_fp",         "No FP",         "https://liferay.atlassian.net/issues/?filter=45384"),
-]
 
-
-def _format_delta(delta: int | None) -> str:
+def _build_test_section() -> list[dict]:
     """
-    Format a delta integer as "(+2)", "(−3)", or "(=)".
-    Uses − (Unicode minus sign U+2212), not hyphen-minus.
-    Returns "(–)" if delta is None (baseline unknown / N/A).
-    """
-    if delta is None:
-        return "(–)"
-    if delta == 0:
-        return "(=)"
-    if delta > 0:
-        return f"(+{delta})"
-    return f"(−{abs(delta)})"   # U+2212 = −
-
-
-def _build_testing_panel_bullet(
-    label: str,
-    filter_url: str,
-    count: int | None,
-    delta: int | None,
-) -> list:
-    """
-    Build the inline node list for one testing panel bullet item.
-    Format: "{label}: {N} ({delta}) [inlineCard]"
-    If count is None → "{label}: N/A (–) [inlineCard]"
-    """
-    if count is None:
-        count_str = "N/A"
-        delta_str = "(–)"   # en-dash for N/A indicator
-    else:
-        count_str = str(count)
-        delta_str = _format_delta(delta)
-
-    return [
-        adf_text(f"{label}: {count_str} {delta_str} "),
-        adf_inline_card(filter_url),
-    ]
-
-
-def _build_testing_section(testing_panel: dict) -> list[dict]:
-    """
-    Build the testing section block nodes:
+    Build the static Test section block nodes:
       h2: 🧪 Test
-      bold paragraph: "Testing Panel (YYYY-MM-DD):"
-      bullet list (5 items, one per filter)
+      Include Page macro → TEST_REGRESSION_PAGE_TITLE
 
     Returns a list of block nodes ready to extend the document content list.
+    Takes no arguments — this section is identical on every run.
     """
-    today_str = testing_panel.get("date", str(date.today()))
-
-    nodes: list[dict] = [
+    return [
         adf_heading("\U0001f9ea Test", level=2),
-        adf_paragraph(adf_strong(f"Testing Panel ({today_str}):")),
+        adf_include_page_macro(TEST_REGRESSION_PAGE_TITLE),
     ]
-
-    bullet_items = []
-    for field_key, label, filter_url in _TESTING_FILTERS:
-        entry = (testing_panel.get(field_key) or {})
-        count = entry.get("count")   # int or None
-        delta = entry.get("delta")   # int or None
-        bullet_items.append(_build_testing_panel_bullet(label, filter_url, count, delta))
-
-    nodes.append(adf_bullet_list(*bullet_items))
-    return nodes
 
 
 # ── Main ADF document assembler ───────────────────────────────────────────────
@@ -2956,12 +3182,24 @@ def build_adf_document(report_data: dict, ctx: "SprintContext") -> dict:
       h2: 📋 Pick Up Next
       h3: Open PRs — Needs Owner (only if any; PR rows surfaced here)
       Section 2 PR table
-      h3: 2a. Assigned
-      Section 2a table (or "No assigned items." paragraph)
-      h3: 2b. Needs Owner
+      h3: 2a. Needs Owner
       Section 2b table (or "No unassigned items." paragraph)
+      h3: 2b. Assigned
+      Section 2a table (or "No assigned items." paragraph)
       rule
-      🧪 Test section (h2 + bold paragraph + bullet list)
+      🧪 Test section (h2 + Include Page macro — static, no data collection)
+
+    2026-07-08 (per Nóra): "Needs Owner" now renders BEFORE "Assigned" under
+    Pick Up Next.
+
+    2026-07-08 (per Nóra, follow-up): the displayed heading numbers were
+    updated to match this order — "Needs Owner" is now labeled 2a (it
+    renders first) and "Assigned" is now labeled 2b (it renders second).
+    This is a display-label change only: the internal `section2a`/`section2b`
+    variable names and the "2a"/"2b" routing values used elsewhere in the
+    pipeline (e.g. `classify_section2`, PR routing) are unchanged and still
+    mean "assigned" / "needs owner" respectively — only the heading text
+    shown to the reader was renumbered.
     """
     account_ids = ctx.account_ids
 
@@ -2969,7 +3207,6 @@ def build_adf_document(report_data: dict, ctx: "SprintContext") -> dict:
     section2_pr = report_data.get("section2_pr", [])
     section2a  = report_data.get("section2a", [])
     section2b  = report_data.get("section2b", [])
-    testing_panel = report_data.get("testing_panel", {})
 
     today_str = str(date.today())
     sprint_info = (
@@ -3005,22 +3242,22 @@ def build_adf_document(report_data: dict, ctx: "SprintContext") -> dict:
         content.append(adf_heading("Open PRs — Needs Owner", level=3))
         content.append(_build_section_table(section2_pr, "Days Open", account_ids))
 
-    content.append(adf_heading("2a. Assigned", level=3))
-    if section2a:
-        content.append(_build_section_table(section2a, "Days in Queue", account_ids))
-    else:
-        content.append(adf_paragraph(adf_text("No assigned items.")))
-
-    content.append(adf_heading("2b. Needs Owner", level=3))
+    content.append(adf_heading("2a. Needs Owner", level=3))
     if section2b:
         content.append(_build_section_table(section2b, "Days in Queue", account_ids))
     else:
         content.append(adf_paragraph(adf_text("No unassigned items.")))
 
+    content.append(adf_heading("2b. Assigned", level=3))
+    if section2a:
+        content.append(_build_section_table(section2a, "Days in Queue", account_ids))
+    else:
+        content.append(adf_paragraph(adf_text("No assigned items.")))
+
     content.append(adf_rule())
 
-    # ── Testing section ───────────────────────────────────────────────────────
-    content.extend(_build_testing_section(testing_panel))
+    # ── Test section (static — Include Page macro) ───────────────────────────
+    content.extend(_build_test_section())
 
     return {
         "version": 1,
@@ -3137,6 +3374,7 @@ def _extract_text_from_cell(cell: dict) -> str:
 # Row background colours per tier (CSS colour strings)
 _HTML_TIER_COLORS: dict[str, str] = {
     "PR":  "#fff8e1",   # light amber
+    "SLACK": "#ede7f6", # light purple
     "1.1": "#ffcdd2",   # red-100
     "1.2": "#ffcdd2",
     "2":   "#e8d5f5",   # purple-100
@@ -3253,6 +3491,14 @@ def _html_section_table(rows: list[dict], days_header: str, ctx: "SprintContext"
             topic_html = ""
             issue_html = _gh_pr_link(pr_num)
             assignee_html = _html_esc(author)
+        elif row.get("type") == "slack":
+            slack = row["slack"]
+            permalink = slack.get("permalink", "")
+            title = slack.get("title", "")
+            author = slack.get("author", "")
+            topic_html = _html_esc(title)
+            issue_html = f'<a href="{permalink}" target="_blank">Slack thread</a>'
+            assignee_html = _html_esc(author or "—")
         else:
             issue = row["issue"]
             key = issue.get("key", "")
@@ -3279,28 +3525,22 @@ def _html_section_table(rows: list[dict], days_header: str, ctx: "SprintContext"
     return html
 
 
-def _html_testing_panel(testing_panel: dict) -> str:
-    """Build the HTML Testing Panel section."""
-    if not testing_panel:
-        return "<p><em>No testing panel data.</em></p>"
+def _html_test_section() -> str:
+    """
+    Build the HTML preview of the (static) Test section.
 
-    today_str = testing_panel.get("date", str(date.today()))
-    html = f"<p><strong>Testing Panel ({_html_esc(today_str)}):</strong></p><ul>\n"
-
-    for field_key, label, filter_url in _TESTING_FILTERS:
-        entry = testing_panel.get(field_key) or {}
-        count = entry.get("count")
-        delta = entry.get("delta")
-
-        count_str = "N/A" if count is None else str(count)
-        delta_str = _format_delta(delta)
-        html += (
-            f'<li>{_html_esc(label)}: <strong>{count_str}</strong> {_html_esc(delta_str)} '
-            f'— <a href="{filter_url}" target="_blank">open filter</a></li>\n'
-        )
-
-    html += "</ul>"
-    return html
+    A plain local HTML file cannot render a live Confluence "Include Page"
+    macro, so the preview just links to the source page — the actual
+    published Confluence page will show that page's content transcluded
+    in place, live, via the macro built by adf_include_page_macro().
+    """
+    return (
+        '<p>This section publishes as a Confluence <strong>Include Page</strong> '
+        f'macro transcluding <a href="{TEST_REGRESSION_PAGE_URL}" target="_blank">'
+        f'{_html_esc(TEST_REGRESSION_PAGE_TITLE)}</a>. Its content is maintained on '
+        'that page independently of this report and is not shown here in the '
+        'local preview — it renders live once published to Confluence.</p>'
+    )
 
 
 def _html_exclusions(excluded: list[tuple[str, str]]) -> str:
@@ -3366,29 +3606,13 @@ def generate_html_preview(
     section2_pr   = report_data.get("section2_pr", [])
     section2a     = report_data.get("section2a", [])
     section2b     = report_data.get("section2b", [])
-    testing_panel = report_data.get("testing_panel", {})
     excluded      = report_data.get("excluded", [])
-
-    # INCOMPLETE banner — shown when all testing panel values are N/A
-    tp = testing_panel or {}
-    testing_na = all(
-        (tp.get(fk) or {}).get("count") is None
-        for fk, _, _ in _TESTING_FILTERS
-    )
-    incomplete_banner = ""
-    if testing_na:
-        incomplete_banner = (
-            '<div class="incomplete-banner">'
-            "&#9888; INCOMPLETE — Testing panel values are all N/A. "
-            "Fetch them via Chrome before publishing."
-            "</div>"
-        )
 
     s1_html    = _html_section_table(section1,  "Days in Progress / T-shirt Size", ctx)
     s2pr_html  = _html_section_table(section2_pr, "Days Open", ctx)
     s2a_html   = _html_section_table(section2a, "Days in Queue", ctx)
     s2b_html   = _html_section_table(section2b, "Days in Queue", ctx)
-    tp_html    = _html_testing_panel(testing_panel)
+    tp_html    = _html_test_section()
     excl_html  = _html_exclusions(excluded)
     cache_html = _html_cache_preview(report_data, ctx)
 
@@ -3419,15 +3643,6 @@ def generate_html_preview(
     border-radius: 6px;
     margin-bottom: 16px;
     font-size: 14px;
-    font-weight: 600;
-  }}
-  .incomplete-banner {{
-    background: #fff3cd;
-    border: 2px solid #f59e0b;
-    color: #92400e;
-    padding: 10px 16px;
-    border-radius: 6px;
-    margin-bottom: 16px;
     font-weight: 600;
   }}
   .timestamp {{
@@ -3491,7 +3706,6 @@ def generate_html_preview(
 <body>
 
 <div class="sprint-bar">{sprint_info}</div>
-{incomplete_banner}
 <div class="timestamp">Generated: {_html_esc(fetched_at)}</div>
 
 <h2>&#128308; In Progress &#8212; Needs Attention <span class="section-count">({len(section1)} items)</span></h2>
@@ -3501,11 +3715,11 @@ def generate_html_preview(
 
 <h2>&#128203; Pick Up Next</h2>
 {(f'<h3>Open PRs &#8212; Needs Owner <span class="section-count">({len(section2_pr)} items)</span></h3>' + s2pr_html) if section2_pr else ''}
-<h3>2a. Assigned <span class="section-count">({len(section2a)} items)</span></h3>
-{s2a_html}
-
-<h3>2b. Needs Owner <span class="section-count">({len(section2b)} items)</span></h3>
+<h3>2a. Needs Owner <span class="section-count">({len(section2b)} items)</span></h3>
 {s2b_html}
+
+<h3>2b. Assigned <span class="section-count">({len(section2a)} items)</span></h3>
+{s2a_html}
 
 <hr>
 
@@ -3783,8 +3997,10 @@ def update_caches(
       - changelog_cache  : merge in new/changed entries from this run
       - state_snapshot   : replace issues dict with current statuses/assignees
       - pr_snapshot      : replace prs dict with only open PRs seen this run
-      - testing_baseline : update counts where count is not None / "N/A"
       - account_ids      : merge any newly resolved account IDs
+
+    (Testing baseline tracking was removed 2026-07-09 — the Test section is
+    now a static Confluence Include Page macro, not data this script fetches.)
     """
     today_str = str(date.today())
 
@@ -3852,28 +4068,7 @@ def update_caches(
     }
     print(f"  [update_caches] pr_snapshot: {len(new_prs)} open PRs, date={today_str}")
 
-    # ── 4. Testing baseline ───────────────────────────────────────────────────
-    # Only update fields where count is an int (not None and not "N/A").
-    tp = report_data.get("testing_panel") or {}
-    updated_fields: list[str] = []
-
-    baseline = dict(ctx.testing_baseline)  # copy before mutating
-    baseline["date"] = today_str
-
-    for field_key, _, _ in _TESTING_FILTERS:
-        entry = tp.get(field_key) or {}
-        count = entry.get("count")
-        if count is not None and count != "N/A":
-            baseline[field_key] = {"count": count}
-            updated_fields.append(field_key)
-
-    ctx.testing_baseline = baseline
-    if updated_fields:
-        print(f"  [update_caches] testing_baseline updated: {updated_fields}")
-    else:
-        print(f"  [update_caches] testing_baseline: no new counts (all N/A) — baseline unchanged")
-
-    # ── 5. Account IDs ────────────────────────────────────────────────────────
+    # ── 4. Account IDs ────────────────────────────────────────────────────────
     # Merge any new name→id mappings gathered during the run.
     new_account_ids = report_data.get("account_ids_seen", {})
     if new_account_ids:
@@ -3885,7 +4080,7 @@ def update_caches(
         if merged:
             print(f"  [update_caches] account_ids: merged {merged} new entries")
 
-    # ── 6. Persist ────────────────────────────────────────────────────────────
+    # ── 5. Persist ────────────────────────────────────────────────────────────
     save_sprint_context(ctx, sprint_context_path)
     print(f"  [update_caches] ✓ All caches saved to {sprint_context_path.name}")
 
@@ -3904,106 +4099,6 @@ _TODAY: date | None = None
 def _today() -> date:
     """Return the effective report date (--date override or real today)."""
     return _TODAY if _TODAY is not None else date.today()
-
-
-def _build_testing_panel_data(
-    ctx: "SprintContext",
-    skip: bool,
-    counts_file: "Path | None" = None,
-) -> dict:
-    """
-    Build the testing_panel sub-dict for report_data.
-
-    If skip=True (--no-testing-panel), all counts are None (HTML shows N/A).
-
-    If counts_file is provided (--testing-panel-file), load counts from that JSON.
-    Expected format:
-      {"investigation": 42, "acceptance": 15, "all_bugs": 103, "fp4_fp5": 7, "no_fp": 96}
-    Key names must match the _TESTING_FILTERS field keys.
-
-    *** HOW TO GENERATE THE COUNTS FILE ***
-
-    investigation and acceptance — from Testray (read via Chrome MCP):
-      Routine: https://testray.liferay.com/web/testray#/project/35392/routines/994140
-
-      1. Navigate to the routine page and find the two latest builds:
-         - "Whole run" = latest [master] ci:test:headless build
-         - "Acceptance" = latest EE Development Acceptance (master) build
-           filtered by Headless team (testrayTeamIds=[45740])
-
-      2. For each build, read the "Total test cases" chart and take the FAILED count.
-         - investigation = Failed count from the whole run build
-         - acceptance    = Failed count from the Acceptance build (Headless team filter)
-
-    all_bugs, fp4_fp5, no_fp — from Jira via browser JavaScript fetch from a
-    liferay.atlassian.net Chrome tab (uses the user's authenticated session):
-
-      (async () => {
-        const filters = [
-          [15065, "all_bugs"], [45383, "fp4_fp5"], [45384, "no_fp"]
-        ];
-        const counts = {};
-        for (const [id, key] of filters) {
-          let total = 0, cursor = undefined, isLast = false, pages = 0;
-          while (!isLast && pages < 50) {
-            const body = {jql: `filter=${id}`, maxResults: 5000, fields: ["key"]};
-            if (cursor) body.nextPageToken = cursor;
-            const resp = await fetch("/rest/api/3/search/jql", {
-              method: "POST", headers: {"Content-Type": "application/json"},
-              body: JSON.stringify(body)
-            });
-            const data = await resp.json();
-            total += (data.issues || []).length;
-            isLast = data.isLast ?? true;
-            cursor = data.nextPageToken;
-            pages++;
-          }
-          counts[key] = total;
-        }
-        return JSON.stringify(counts);
-      })()
-
-    Combine Testray and Jira counts into testing_panel.json:
-      {"investigation": 101, "acceptance": 18, "all_bugs": 186, "fp4_fp5": 2, "no_fp": 12}
-
-    Pass with --testing-panel-file testing_panel.json.
-
-    NOTE: NEVER use Atlassian MCP searchJiraIssuesUsingJql for all_bugs/fp4_fp5/no_fp —
-    it uses service credentials and returns wrong totals.
-
-    Computes deltas from ctx.testing_baseline where available.
-    """
-    today_str = str(_today())
-
-    if skip:
-        return {
-            "date": today_str,
-            **{fk: {"count": None, "delta": None} for fk, _, _ in _TESTING_FILTERS},
-        }
-
-    live_counts: dict[str, int | None] = {}
-    if counts_file and counts_file.exists():
-        try:
-            raw = json.loads(counts_file.read_text(encoding="utf-8"))
-            for fk, _, _ in _TESTING_FILTERS:
-                v = raw.get(fk)
-                live_counts[fk] = int(v) if v is not None else None
-            print(f"  [testing_panel] Loaded counts from {counts_file.name}: {live_counts}")
-        except Exception as exc:
-            print(f"  [testing_panel] !! Failed to load counts file: {exc}")
-
-    result: dict = {"date": today_str}
-    baseline = ctx.testing_baseline or {}
-    for fk, _, _ in _TESTING_FILTERS:
-        count = live_counts.get(fk)
-        if count is not None:
-            prev = baseline.get(fk)
-            delta = (count - prev) if isinstance(prev, int) else None
-        else:
-            delta = None
-        result[fk] = {"count": count, "delta": delta}
-
-    return result
 
 
 def _sort_section1(rows: list[dict]) -> list[dict]:
@@ -4095,22 +4190,15 @@ def main() -> None:
                         help="Path to JSON file with Jira data fetched by Claude via Jira MCP")
     parser.add_argument("--pr-data-file",     default=None, metavar="PATH",
                         help="Path to JSON file with PR data fetched by Claude via Chrome MCP")
-    parser.add_argument("--no-testing-panel", action="store_true",
-                        help="Skip testing panel fetch (show N/A for all counts)")
-    parser.add_argument("--testing-panel-file", default=None, metavar="PATH",
-                        help=(
-                            "Path to JSON file with testing panel counts. "
-                            "MUST be generated via browser JS fetch (see _build_testing_panel_data docstring). "
-                            "NEVER use the Atlassian MCP searchJiraIssuesUsingJql tool — it returns wrong totals "
-                            "because it uses different credentials than the user's Jira session. "
-                            'Expected format: {"investigation": N, "acceptance": N, "all_bugs": N, "fp4_fp5": N, "no_fp": N}'
-                        ))
+    parser.add_argument("--slack-data-file",  default=None, metavar="PATH",
+                        help="Path to slack_data.json written by "
+                             "'assemble_slack_data.py classify' (unanswered Slack threads)")
     parser.add_argument("--confirm-publish",  action="store_true",
                         help=(
                             "Use ONLY after the browser publish (file-upload + snippet, or console "
                             "paste) has returned HTTP 200. Re-runs the pipeline against the same "
-                            "data files and calls update_caches() to write the new State Snapshot, "
-                            "PR Snapshot, and Testing Baseline back to project_current_sprint.md. "
+                            "data files and calls update_caches() to write the new State Snapshot "
+                            "and PR Snapshot back to project_current_sprint.md. "
                             "Implies --publish. Never run this before publish has actually succeeded."
                         ))
     parser.add_argument("--test-exclusions",  action="store_true",
@@ -4168,6 +4256,12 @@ def main() -> None:
     else:
         pr_file = Path(args.pr_data_file) if args.pr_data_file else None
         open_prs = fetch_open_prs(ctx, pr_data_file=pr_file)
+
+    # Load unanswered Slack threads (fully classified already — see
+    # assemble_slack_data.py). Optional: no --slack-data-file just means no
+    # Slack rows this run, same graceful-degradation as --no-github.
+    slack_file = Path(args.slack_data_file) if args.slack_data_file else None
+    slack_threads = load_slack_data(slack_file)
 
     # ── Supplement: fetch full data for SEV BPRs not in sprint filter ────────
     # filter=15069 only gives us the set of SEV BPR keys; their full issue
@@ -4277,6 +4371,15 @@ def main() -> None:
     # In both cases the LPD row is redundant: its PR(s) and context are visible
     # under the LPP. We suppress the LPD row and re-home its attached PRs onto
     # the LPP row so rule 1 (PR-under-In-Progress) also covers them.
+    #
+    # 2026-07-08 (per Nóra — duplicate LPD row bug): path (b) used to only
+    # suppress the LPD when it already had an attached PR — an LPD linked to
+    # an in-scope LPP but with no PR of its own slipped through and rendered
+    # as BOTH its own full row AND the "Fix: LPD-XXXX" text on the LPP row.
+    # An LPD linked to an in-scope LPP is always redundant as a standalone
+    # row (its context is visible via the LPP's "Fix:" reference regardless
+    # of whether it has a PR), so the attached_prs requirement is dropped —
+    # any in-scope LPD linked to an in-scope LPP is now always suppressed.
     _lpp_claimed_lpd_keys: dict[str, str] = {}   # LPD key -> claiming LPP key
 
     # (a) PR-declared lpp_fix_key
@@ -4287,25 +4390,28 @@ def main() -> None:
                     _lpp_claimed_lpd_keys[candidate] = pr["lpp_fix_key"]
                     print(f"  [rule2/lpp_suppression] {candidate} claimed by {pr['lpp_fix_key']} via PR#{pr['pr_number']}")
 
-    # (b) LPP issuelinks → LPD (only when that LPD has an attached PR; an LPD with
-    #     no PR carries unique context and is left as its own row)
+    # (b) LPP issuelinks → LPD (always suppressed, regardless of whether that
+    #     LPD has an attached PR — see 2026-07-08 note above)
     for lpp_key, lpp_issue in issues_dict.items():
         if not lpp_key.startswith("LPP-"):
             continue
         for link in lpp_issue.get("issuelinks") or []:
             for side in ("inwardIssue", "outwardIssue"):
                 linked_key = (link.get(side) or {}).get("key", "")
-                if (linked_key.startswith("LPD-")
-                        and linked_key in issues_dict
-                        and issues_dict[linked_key].get("attached_prs")):
+                if linked_key.startswith("LPD-") and linked_key in issues_dict:
                     _lpp_claimed_lpd_keys.setdefault(linked_key, lpp_key)
-                    # Re-home the LPD's PRs onto the LPP row so they nest there.
-                    lpp_issue.setdefault("attached_prs", [])
-                    for pr in issues_dict[linked_key].get("attached_prs", []):
-                        if pr not in lpp_issue["attached_prs"]:
-                            lpp_issue["attached_prs"].append(pr)
-                            pr["_rehomed_to_lpp"] = lpp_key
-                    print(f"  [rule2/lpp_suppression] {linked_key} claimed by {lpp_key} via LPP issuelink; PRs re-homed")
+                    # Re-home the LPD's PRs (if any) onto the LPP row so they
+                    # nest there too. An LPD with no PRs has nothing to
+                    # re-home — it's still suppressed as a standalone row.
+                    linked_prs = issues_dict[linked_key].get("attached_prs")
+                    if linked_prs:
+                        lpp_issue.setdefault("attached_prs", [])
+                        for pr in linked_prs:
+                            if pr not in lpp_issue["attached_prs"]:
+                                lpp_issue["attached_prs"].append(pr)
+                                pr["_rehomed_to_lpp"] = lpp_key
+                    print(f"  [rule2/lpp_suppression] {linked_key} claimed by {lpp_key} via LPP issuelink"
+                          + (" ; PRs re-homed" if linked_prs else " (no PRs to re-home)"))
 
     for key, lpp_key in _lpp_claimed_lpd_keys.items():
         if key in issues_dict:
@@ -4433,6 +4539,29 @@ def main() -> None:
         else:
             section2b_pr_rows.append(pr_row)
 
+    # ── Slack "Needs Owner" rows ──────────────────────────────────────────────
+    # Every unanswered Slack thread (already fully classified by
+    # assemble_slack_data.py — no owner/roster logic here) is pinned to the
+    # very top of Needs Owner, ahead of cross-team PRs and everything else,
+    # per Nóra: a public-channel question with no team reply is the most
+    # visible kind of dropped ball. Sorted oldest-first among themselves.
+    section2b_slack_rows: list[dict] = []
+    for thread in slack_threads:
+        age_days = thread.get("age_days", 0) or 0
+        row = {
+            "type":        "slack",
+            "slack":       thread,
+            "tier_key":    "SLACK",
+            "_tier_num":   -1.0,
+            "section":     "2b",
+            "days_cell":   f"{age_days}d — no reply",
+            "action_text": "❓ Slack question in #t-dxp-headless — no reply from the team yet",
+        }
+        section2b_slack_rows.append(row)
+    section2b_slack_rows.sort(key=lambda r: -(r["slack"].get("age_days", 0) or 0))
+    if section2b_slack_rows:
+        print(f"  [slack] {len(section2b_slack_rows)} unanswered thread(s) pinned to top of Needs Owner")
+
     # Issue rows
     for issue in issues_with_prs:
         section = issue.get("_section")
@@ -4557,7 +4686,9 @@ def main() -> None:
                        -int((r.get("pr") or {}).get("open_days", 0)))
     )
     section2a_rows = section2a_pr_rows + section2a_issue_rows
-    section2b_rows = section2b_pr_rows + section2b_issue_rows
+    # Slack rows sit above everything else in Needs Owner — see comment where
+    # section2b_slack_rows is built.
+    section2b_rows = section2b_slack_rows + section2b_pr_rows + section2b_issue_rows
 
     # No separate Pick Up Next PR table any more — PRs live in 2a/2b.
     section2_pr_rows = []
@@ -4566,18 +4697,14 @@ def main() -> None:
     print(f"  Section 2a: {len(section2a_rows)} rows "
           f"({len(section2a_pr_rows)} PRs + {len(section2a_issue_rows)} issues)")
     print(f"  Section 2b: {len(section2b_rows)} rows "
-          f"({len(section2b_pr_rows)} PRs + {len(section2b_issue_rows)} issues)")
+          f"({len(section2b_slack_rows)} Slack + {len(section2b_pr_rows)} PRs + {len(section2b_issue_rows)} issues)")
 
     # ── 13. Build report_data ─────────────────────────────────────────────────
-    tp_file = Path(args.testing_panel_file) if args.testing_panel_file else None
-    testing_panel_data = _build_testing_panel_data(ctx, skip=args.no_testing_panel, counts_file=tp_file)
-
     report_data: dict = {
         "section1":          section1_rows,
         "section2_pr":       section2_pr_rows,
         "section2a":         section2a_rows,
         "section2b":         section2b_rows,
-        "testing_panel":     testing_panel_data,
         "excluded":          excluded,
         "account_ids_seen":  account_ids_seen,
         "cache_preview": {
@@ -4599,7 +4726,8 @@ def main() -> None:
     print(f"  Section 1 (In Progress):  {len(section1_rows)} rows")
     print(f"  Pick Up Next — PRs:       {len(section2_pr_rows)} rows")
     print(f"  Section 2a (Assigned):    {len(section2a_rows)} rows")
-    print(f"  Section 2b (Needs Owner): {len(section2b_rows)} rows")
+    print(f"  Section 2b (Needs Owner): {len(section2b_rows)} rows "
+          f"(of which {len(section2b_slack_rows)} unanswered Slack thread(s))")
     print(f"  Excluded:                 {len(excluded)}")
     print(f"  Open PRs (total):         {len(open_prs)}")
     print(f"  Standalone PRs:           {len(standalone_prs)}")
