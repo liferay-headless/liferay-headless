@@ -89,6 +89,13 @@ def main() -> None:
                          "exactly, or the build fails. This is the ONLY reliable guard against "
                          "a truncated page that the MCP falsely marks hasNextPage=false "
                          "(root cause of the LPP-64669 miss on 2026-07-02).")
+    ap.add_argument("--changelog-file", default=None,
+                    help="Optional JSON file mapping issue key -> list of changelog history "
+                         "dicts (same shape as the Jira API's changelog.histories), built by "
+                         "Claude from getJiraIssue(expand=changelog) MCP calls during data "
+                         "collection. Merged into jira_data.json's optional 'changelogs' field "
+                         "so headless_daily_report.py never needs a direct HTTPS fallback for "
+                         "these issues (2026-07-08, per Nóra — see SKILL.md Workflow step 1).")
     args = ap.parse_args()
 
     # ── Load ────────────────────────────────────────────────────────────────
@@ -115,6 +122,43 @@ def main() -> None:
 
     sev_issues = [normalise(i) for i in sev_issues]
     bpr_issues = [normalise(i) for i in bpr_issues]
+
+    # ── Defense-in-depth: drop any SEV issue already closed/resolved by build
+    # time, even though the JQL already filters "status not in (closed)".
+    # ROOT CAUSE (2026-07-15): a SEV bug (LPD-97411) closed between an early
+    # fetch and the final build in the same session, and the stale early
+    # fetch was reused instead of a fresh one — the closed bug then appeared
+    # in the published report. This check is a safety net for that race, NOT
+    # a substitute for re-fetching SEV data fresh immediately before running
+    # this script (see SKILL.md).
+    def _is_done(issue: dict) -> bool:
+        status = (issue.get("fields") or {}).get("status") or {}
+        cat = (status.get("statusCategory") or {}).get("key", "")
+        name = (status.get("name") or "").strip().lower()
+        return cat == "done" or name in ("closed", "resolved", "answered")
+
+    stale_sev = [i["key"] for i in sev_issues if _is_done(i)]
+    if stale_sev:
+        print(f"   ⚠ Dropping {len(stale_sev)} SEV issue(s) already closed/resolved "
+              f"at build time (stale fetch — re-verify next time): {', '.join(stale_sev)}",
+              file=sys.stderr)
+        sev_issues = [i for i in sev_issues if i["key"] not in stale_sev]
+
+    # ── Resolve additional SEV BPRs via each SEV bug's own issuelinks ───────
+    # ROOT CAUSE (2026-07-15): the saved BPR filter (filter=15069) depends on
+    # the Branch Manager having tagged/created the backport ticket by fetch
+    # time, which can lag behind the SEV bug's own status change (BPR-91107 /
+    # BPR-91108 for LPD-97411 didn't exist yet on the first fetch). Reading
+    # each SEV bug's own issuelinks is a more reliable source of truth and is
+    # unioned in below. Requires "issuelinks" in the SEV bugs query's fields
+    # (see SKILL.md) — silently finds nothing if that field wasn't fetched.
+    linked_bpr_keys: set[str] = set()
+    for issue in sev_issues:
+        for link in (issue.get("fields") or {}).get("issuelinks") or []:
+            for side in ("inwardIssue", "outwardIssue"):
+                other = link.get(side)
+                if other and str(other.get("key", "")).startswith("BPR-"):
+                    linked_bpr_keys.add(other["key"])
 
     # ── Validate (hard stops — mirror SKILL.md rules) ───────────────────────
     n = len(sprint_issues)
@@ -167,7 +211,11 @@ def main() -> None:
     sev_keys = keys_of(sev_issues)
     sev_zero_day_keys = [i["key"] for i in sev_issues
                          if "zero-day-vulnerability" in (i["fields"].get("labels") or [])]
-    sev_bpr_keys = keys_of(bpr_issues)
+    sev_bpr_keys = sorted(set(keys_of(bpr_issues)) | linked_bpr_keys)
+    _newly_found_bprs = linked_bpr_keys - set(keys_of(bpr_issues))
+    if _newly_found_bprs:
+        print(f"   + {len(_newly_found_bprs)} SEV BPR(s) found via issuelinks, not in the "
+              f"filter=15069 result: {', '.join(sorted(_newly_found_bprs))}")
 
     # ── Write ───────────────────────────────────────────────────────────────
     out = {
@@ -176,6 +224,24 @@ def main() -> None:
         "sev_zero_day_keys": sev_zero_day_keys,
         "sev_bpr_keys": sev_bpr_keys,
     }
+
+    # ── Optional pre-fetched changelogs (2026-07-08, per Nóra) ────────────────
+    # Merged in as-is; does not affect any of the validation/completeness
+    # checks above, which only ever cover sprint_issues/sev_issues/bpr_issues.
+    if args.changelog_file:
+        cl_path = Path(args.changelog_file)
+        if not cl_path.exists():
+            fail(f"--changelog-file {cl_path} does not exist.")
+        try:
+            changelogs = json.loads(cl_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            fail(f"--changelog-file {cl_path} is not valid JSON: {exc}")
+        if not isinstance(changelogs, dict):
+            fail(f"--changelog-file {cl_path} must contain a JSON object "
+                 f"(issue key -> list of history dicts), got {type(changelogs).__name__}.")
+        out["changelogs"] = changelogs
+        print(f"   Changelogs: {len(changelogs)} pre-fetched (from {cl_path})")
+
     out_path = Path(args.out)
     out_path.write_text(json.dumps(out), encoding="utf-8")
 
