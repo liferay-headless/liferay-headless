@@ -41,3 +41,15 @@ claude plugin install liferay-headless@liferay-headless
     ```bash
     curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/liferay.com.sh?ref=main" | bash
     ```
+
+- **Set up MCP over OAuth 2**:
+
+    ```bash
+    curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/mcp-oauth.sh?ref=main" | bash
+    ```
+
+- **Undo the MCP over OAuth 2 setup**:
+
+    ```bash
+    curl -sSL -H "Accept: application/vnd.github.v3.raw" "https://api.github.com/repos/liferay-headless/liferay-headless/contents/scripts/mcp-oauth.sh?ref=main" | bash -s -- --cleanup
+    ```
