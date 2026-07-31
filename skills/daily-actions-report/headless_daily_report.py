@@ -20,8 +20,19 @@ Environment variables:
   ATLASSIAN_TOKEN   — Atlassian API token
 
 Sprint config (sprint label, dates, Confluence page ID) is read at runtime from
-  project_current_sprint.md in the daily-actions-report skill folder.
+  project_current_sprint.md in the headless-daily-actions-report skill folder.
 Nothing sprint-specific is hardcoded in this file.
+
+Shared context storage (v2.0.0+): the content that used to live only in the
+local project_current_sprint.md (Sprint Metadata, rosters, and the four
+run-to-run caches) is now sourced from a shared Confluence page so every
+teammate's session — not just the machine that happens to run it — sees the
+same data. Claude fetches that page at the start of a run, writes it to a
+scratch file, and passes that file's path via --sprint-context-file (falling
+back to the local project_current_sprint.md if the flag is omitted, so this
+script still works standalone/offline). After a successful publish, Claude
+reads the updated scratch file back and pushes it to the same Confluence
+page. See SKILL.md § Shared Context Storage for the exact page ID and flow.
 
 PUBLISH — HAPPENS IN THE USER'S BROWSER (the sandbox PUT is proxy-blocked):
   Direct HTTPS from Claude's sandbox to liferay.atlassian.net is ALWAYS proxy-
@@ -82,7 +93,7 @@ if _ENV_FILE.exists():
 # ── PATHS ────────────────────────────────────────────────────────────────────
 
 # Skill folder — where project_current_sprint.md lives
-SKILL_DIR = Path(__file__).parent / "daily-actions-report"
+SKILL_DIR = Path(__file__).parent / "headless-daily-actions-report"
 SPRINT_CONTEXT_FILE = SKILL_DIR / "project_current_sprint.md"
 
 # Output folder — HTML previews land here (same dir as the script)
@@ -96,6 +107,12 @@ GITHUB_REPO = "liferay-portal"
 
 SPRINT_FILTER_ID = "54796"
 SEV_BPR_FILTER_ID = "15069"
+
+# Bumped on every change to this script, assemble_jira_data.py, or
+# assemble_slack_data.py. Printed at the start of every run so it's always
+# visible which version produced a given console log / report. See
+# CHANGELOG.md for what changed at each version.
+SKILL_VERSION = "2.1.1"
 
 # ── EXCLUSION ACCOUNT IDs (permanently excluded individuals) ─────────────────
 
@@ -350,6 +367,12 @@ class SprintContext:
     # across sprint rollovers. If absent, falls back to sprint_label-based title.
     report_page_title: str = ""
 
+    # Version of the skill that last wrote the shared context page (see
+    # SKILL_VERSION at the top of this file). Used purely to warn if this
+    # run is on an older copy of the skill than the one that last updated
+    # the shared context — never blocks a run, just flags it loudly.
+    latest_skill_version: str = ""
+
     # Caches and snapshots — mutable dicts updated after each publish
     changelog_cache: dict[str, str] = field(default_factory=dict)
     state_snapshot: dict = field(default_factory=dict)
@@ -428,9 +451,31 @@ def load_sprint_context(path: Path) -> "SprintContext":
     # ── Parse JSON sections ───────────────────────────────────────────────────
     # Pattern: ## SectionName (on a line of its own, not preceded by other content)
     # Uses a non-greedy section name that cannot span newlines.
+    #
+    # 2026-07-29 fix: the gap between the heading and the ```json fence is
+    # matched with \n+ (one or more newlines), not a single literal \n. A
+    # single-\n match silently produced ZERO matches — and therefore an
+    # entirely empty json_sections dict, with no error of any kind — the
+    # moment any blank line crept in between a heading and its fence. That's
+    # exactly what happened on 2026-07-29: this file is round-tripped through
+    # Confluence (getConfluencePage → write scratch file → ... → back to
+    # Confluence), and Confluence's own markdown rendering/re-fetch adds a
+    # blank line after headings as a matter of course. The result was that
+    # every roster (Account IDs, Team GitHub Logins, ...) and every cache
+    # (State Snapshot, Changelog Cache, ...) loaded as {} for that entire run,
+    # which in turn silently mis-excluded real Headless issues (assignee
+    # lookups against an empty roster always fail) and suppressed legitimate
+    # Section 1 triggers (comparing against an empty state snapshot never
+    # finds a prior value to diff against). None of this raised an exception —
+    # it looked like a normal, quiet run. Tolerating the blank line here is
+    # cheap insurance against a whole class of "quietly empty roster" bugs;
+    # if you ever need to tighten this back up, add an explicit assertion
+    # after this loop instead (e.g. fail loudly if json_sections is empty but
+    # the source text clearly contains ```json fences) rather than reverting
+    # to a strict single-\n match.
     json_sections: dict[str, dict] = {}
     for section_match in re.finditer(
-        r"^## ([^\n]+)\n```json\n(.*?)```",
+        r"^## ([^\n]+)\n+```json\n(.*?)```",
         text,
         re.DOTALL | re.MULTILINE,
     ):
@@ -443,6 +488,18 @@ def load_sprint_context(path: Path) -> "SprintContext":
             json_sections[section_name] = json.loads(json_text)
         except json.JSONDecodeError as e:
             raise ValueError(f"JSON parse error in section '{section_name}': {e}")
+
+    # Defense in depth: if the raw text clearly has fenced JSON blocks but we
+    # parsed zero sections, the regex (or an upstream format change) is
+    # broken — fail loudly instead of silently proceeding with empty rosters,
+    # which is exactly the failure mode that motivated the \n+ fix above.
+    if not json_sections and "```json" in text:
+        raise ValueError(
+            "load_sprint_context: found ```json fences in the source text but "
+            "parsed zero sections. The context file is probably malformed — "
+            "check for headings not matching '## Section Name' exactly, or an "
+            "unclosed fence. Refusing to proceed with empty rosters/caches."
+        )
 
     # ── Validate required fields ──────────────────────────────────────────────
     # sprint_field is REQUIRED and must be the real Jira Sprint value (starts
@@ -475,6 +532,7 @@ def load_sprint_context(path: Path) -> "SprintContext":
         end_date=date.fromisoformat(metadata["end_date"]),
         actions_report_page_id=metadata["actions_report_page_id"],
         report_page_title=metadata.get("report_page_title", ""),
+        latest_skill_version=metadata.get("latest_skill_version", ""),
         changelog_cache=json_sections.get("Changelog Cache", {}),
         state_snapshot=json_sections.get("State Snapshot", {}),
         account_ids=json_sections.get("Account IDs", {}),
@@ -547,9 +605,26 @@ def save_sprint_context(ctx: SprintContext, path: Path) -> None:
             )
         return new_text
 
+    def set_metadata_value(text: str, key: str, value: str) -> str:
+        """Set (or insert) a '- key: value' line inside '## Sprint Metadata'."""
+        meta_block_pattern = re.compile(r"(## Sprint Metadata\n)(.*?)(?=\n## |\Z)", re.DOTALL)
+        m = meta_block_pattern.search(text)
+        if not m:
+            return text  # no Sprint Metadata section — leave untouched
+        block = m.group(2)
+        line_pattern = re.compile(r"^- " + re.escape(key) + r":.*$", re.MULTILINE)
+        new_line = f"- {key}: {value}"
+        if line_pattern.search(block):
+            new_block_text = line_pattern.sub(new_line, block, count=1)
+        else:
+            new_block_text = block.rstrip("\n") + f"\n{new_line}\n"
+        return text[:m.start(2)] + new_block_text + text[m.end(2):]
+
     result = original
     for section_name, data in updates.items():
         result = replace_json_block(result, section_name, data)
+    if ctx.latest_skill_version:
+        result = set_metadata_value(result, "latest_skill_version", ctx.latest_skill_version)
 
     path.write_text(result, encoding="utf-8")
     print(f"  [save_sprint_context] Saved → {path.name}")
@@ -2531,7 +2606,16 @@ def _evaluate_pr_trigger(pr: dict, issue: dict) -> list[str]:
         texts.append(
             f"Waiting for review from {reviewer} ({open_days}d) — {suffix}"
         )
-    # APPROVED → no action needed; don't emit trigger text
+    elif reviewer_status.upper() == "APPROVED":
+        # 2026-07-29 (per Nóra): an approved PR attached to a Section 1 issue
+        # should still show under that issue's Action column, not only in
+        # Pick Up Next — e.g. PR#4055 approved and attached to LPD-98293.
+        # Emitting text here also means dedup rule 1 (which only suppresses a
+        # PR from Pick Up Next when the issue actually renders it) now
+        # correctly suppresses approved-and-attached PRs too.
+        texts.append(
+            f"Approved — ready to merge — {suffix}"
+        )
 
     return texts
 
@@ -4080,7 +4164,14 @@ def update_caches(
         if merged:
             print(f"  [update_caches] account_ids: merged {merged} new entries")
 
-    # ── 5. Persist ────────────────────────────────────────────────────────────
+    # ── 5. Stamp this run's skill version ─────────────────────────────────────
+    # Always stamp the CURRENT running version on a confirmed publish, so the
+    # shared context always reflects whichever copy of the skill last
+    # successfully produced a report -- not just whatever happened to be
+    # loaded from the file already.
+    ctx.latest_skill_version = SKILL_VERSION
+
+    # ── 6. Persist ────────────────────────────────────────────────────────────
     save_sprint_context(ctx, sprint_context_path)
     print(f"  [update_caches] ✓ All caches saved to {sprint_context_path.name}")
 
@@ -4201,9 +4292,32 @@ def main() -> None:
                             "and PR Snapshot back to project_current_sprint.md. "
                             "Implies --publish. Never run this before publish has actually succeeded."
                         ))
+    parser.add_argument("--sprint-context-file", default=None, metavar="PATH",
+                        help="Override the sprint-context file path (Sprint Metadata, "
+                             "rosters, and caches). Defaults to the local "
+                             "project_current_sprint.md. As of v2.0.0, Claude syncs this "
+                             "content from a shared Confluence page before the run and "
+                             "pushes it back after --confirm-publish -- point this at the "
+                             "synced scratch copy, not the local skill file, so the update "
+                             "Claude reads back reflects this run.")
+    parser.add_argument("--output-dir",       default=None, metavar="PATH",
+                        help="Where to write daily_actions_report_*.html, adf_output.json, "
+                             "and the publish_*.js files. Defaults to OUTPUT_DIR (the "
+                             "skill's own folder), which is read-only in sandboxed/Cowork "
+                             "sessions -- pass a writable path there instead of copying the "
+                             "whole skill folder (2026-07-31 fix; see CHANGELOG-fixes-2026-07-31.md).")
     parser.add_argument("--test-exclusions",  action="store_true",
                         help="Run exclusion rule unit tests and exit")
     args = parser.parse_args()
+
+    if args.output_dir:
+        global OUTPUT_DIR
+        OUTPUT_DIR = Path(args.output_dir)
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    sprint_context_path = (
+        Path(args.sprint_context_file) if args.sprint_context_file else SPRINT_CONTEXT_FILE
+    )
 
     # ── Set global report date ────────────────────────────────────────────────
     global _TODAY
@@ -4223,7 +4337,7 @@ def main() -> None:
         sys.exit(0)
 
     print(f"\n{'='*60}")
-    print(f"Headless Daily Actions Report — {today_str}")
+    print(f"Headless Daily Actions Report — {today_str}  (skill v{SKILL_VERSION})")
     if args.dry_run:
         print("MODE: dry-run (ADF will be built + validated, not published)")
     elif args.publish:
@@ -4234,9 +4348,17 @@ def main() -> None:
 
     # ── 2. Load sprint context ────────────────────────────────────────────────
     print("[Step 1] Loading sprint context ...")
-    ctx = load_sprint_context(SPRINT_CONTEXT_FILE)
+    ctx = load_sprint_context(sprint_context_path)
     print(f"  Sprint: {ctx.sprint_label}  |  {ctx.days_remaining}d remaining")
     print(f"  Page ID: {ctx.actions_report_page_id}")
+    if ctx.latest_skill_version and ctx.latest_skill_version != SKILL_VERSION:
+        print(
+            "  \u26a0\ufe0f  This run is on skill v" + SKILL_VERSION + ", but the shared "
+            "context page was last updated by v" + ctx.latest_skill_version + ". If v"
+            + SKILL_VERSION + " is older, update the skill before publishing -- see "
+            "CHANGELOG.md for what changed. Continuing with v" + SKILL_VERSION + "...",
+            file=sys.stderr,
+        )
 
     # ── 3. Load Jira data from file ───────────────────────────────────────────
     print("\n[Step 2] Loading data from files ...")
@@ -4750,7 +4872,7 @@ def main() -> None:
             print("\n[dry-run complete] Caches NOT updated.")
         elif args.confirm_publish:
             print("\n[Step 15] Confirming publish — updating caches in project_current_sprint.md ...")
-            update_caches(report_data, ctx, SPRINT_CONTEXT_FILE)
+            update_caches(report_data, ctx, sprint_context_path)
         else:
             print("[Step 14] Preparing browser publish ...")
             result = publish_report(adf, ctx, dry_run=False)
