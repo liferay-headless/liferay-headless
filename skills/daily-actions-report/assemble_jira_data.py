@@ -34,6 +34,10 @@ MIN_SPRINT_ISSUES = 20
 MIN_WITH_SUMMARY = 15
 MIN_WITH_SPRINT_FIELD = 10
 
+# Bumped in lockstep with headless_daily_report.py and assemble_slack_data.py.
+# See CHANGELOG.md for what changed at each version.
+SKILL_VERSION = "2.1.1"
+
 
 def fail(msg: str) -> None:
     print(f"❌ {msg}", file=sys.stderr)
@@ -77,6 +81,7 @@ def keys_of(issues: list[dict]) -> list[str]:
 
 
 def main() -> None:
+    print(f"assemble_jira_data.py -- skill v{SKILL_VERSION}", file=sys.stderr)
     ap = argparse.ArgumentParser()
     ap.add_argument("--sprint-file", action="append", required=True,
                     help="MCP result file(s) for the sprint issues query (repeatable for pages)")

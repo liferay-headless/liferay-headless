@@ -63,6 +63,11 @@ from pathlib import Path
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
+# Bumped in lockstep with headless_daily_report.py and assemble_jira_data.py.
+# See CHANGELOG.md for what changed at each version.
+SKILL_VERSION = "2.1.1"
+
+
 MONTHS = {
     "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
     "July": 7, "August": 8, "September": 9, "October": 10, "November": 11,
@@ -107,7 +112,7 @@ def usage_fail(msg: str) -> None:
 
 def _read_md_json_section(text: str, section_name: str) -> dict | list | None:
     m = re.search(
-        r"^## " + re.escape(section_name) + r"\n```json\n(.*?)```",
+        r"^## " + re.escape(section_name) + r"\n+```json\n(.*?)```",
         text,
         re.DOTALL | re.MULTILINE,
     )
@@ -122,7 +127,7 @@ def _read_md_json_section(text: str, section_name: str) -> dict | list | None:
 def _write_md_json_section(path: Path, section_name: str, data: dict | list) -> None:
     text = path.read_text(encoding="utf-8")
     pattern = re.compile(
-        r"(^## " + re.escape(section_name) + r"\n```json\n)(.*?)(```)",
+        r"(^## " + re.escape(section_name) + r"\n+```json\n)(.*?)(```)",
         re.DOTALL | re.MULTILINE,
     )
     replacement_json = json.dumps(data, ensure_ascii=False, indent=2)
@@ -544,6 +549,7 @@ def main() -> None:
     p_dismiss.add_argument("--sprint-context", required=True)
 
     args = ap.parse_args()
+    print(f"assemble_slack_data.py -- skill v{SKILL_VERSION}", file=sys.stderr)
 
     if args.mode == "scan":
         run_scan(args)
