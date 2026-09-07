@@ -193,3 +193,19 @@ curl \
 ```
 
 which returns `issues`, `userId`, and `userName` per subtask of the given Task.
+
+## Mark a Subtask Complete
+
+Reusable for the primary subtask and any folded-in sibling. Once the Pull Request covering a subtask's ticket has been opened, transition that subtask from `INANALYSIS` to `COMPLETE`:
+
+```bash
+curl \
+	--data '{"dueStatus": {"key": "COMPLETE", "name": "Complete"}, "issues": "<comma-separated ticket keys>", "r_userToSubtasks_userId": '"${TESTRAY_USER_ID}"'}' \
+	--header "Authorization: Bearer ${ACCESS_TOKEN}" \
+	--header "Content-Type: application/json" \
+	--request PUT \
+	--silent \
+	--url "https://testray.liferay.com/o/c/subtasks/<subtaskId>"
+```
+
+Do this immediately after the PR is created, without waiting for it to merge or for a subsequent build to confirm the fix — verifying the fix landed and holds up is a separate process's job, not this run's. Keep `issues` and `r_userToSubtasks_userId` as already set; only `dueStatus` changes.
