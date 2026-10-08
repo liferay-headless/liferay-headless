@@ -452,10 +452,22 @@
 		width: 13px;
 	}
 
+	.legend .y::before {
+		background: var(--launch);
+		border-radius: 50%;
+		color: #ffffff;
+		content: "\2713";
+		font-size: 9px;
+		height: 13px;
+		line-height: 13px;
+		text-align: center;
+		width: 13px;
+	}
+
 	.legend .l { color: var(--launch); }
 	.legend .p { color: var(--pub); }
 	.legend .a { color: var(--alt); }
-	.legend .l b, .legend .p b, .legend .a b, .legend .r b { color: var(--ink); font-weight: 500; }
+	.legend .l b, .legend .p b, .legend .a b, .legend .r b, .legend .y b { color: var(--ink); font-weight: 500; }
 
 	/* SVG classes (styled through page tokens) */
 
@@ -709,6 +721,11 @@
 	.ops .pencil-theirs .pencil-body { stroke: var(--alt); }
 	.ops .pencil-theirs .pencil-tip { fill: var(--alt-ink); }
 	.ops .pulse.now { animation: ops-pulse 900ms ease; }
+	.ops .ready-mark { opacity: 0; transition: opacity var(--fade) linear; }
+	.ops .is-ready .ready-mark { opacity: 1; }
+	.ops .ready-mark circle { fill: var(--launch); stroke: var(--halo); stroke-width: 2; }
+	.ops .ready-theirs circle { fill: var(--alt); }
+	.ops .ready-mark path { fill: none; stroke: #ffffff; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 	@keyframes ops-pulse {
 		0% { transform: scale(1); }
@@ -717,7 +734,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.ops .draw, .ops .head, .ops .pencil, .ops .step { transition: none; }
+		.ops .draw, .ops .head, .ops .pencil, .ops .ready-mark, .ops .step { transition: none; }
 		.ops .pulse.now { animation: none; }
 		.ops-steps button { transition: none; }
 	}
@@ -751,26 +768,27 @@
 		<div class="mast">
 			<div class="mast-meta">
 				<h1>Launches</h1>
-				<p class="lede">A <strong>launch</strong> is a list of assets, each pinned to a version: this page, this article, this fragment. Changing what ships means changing a version on that list.</p>
+				<p class="lede">A <strong>launch</strong> is a list of assets, each with a <strong>draft</strong> of its own made from a version you pick: this page, this article, this fragment. Publishing the launch turns every draft into a new version.</p>
 			</div>
 		</div>
 	</header>
 
 	<section class="ops-section tabbed">
 		<h2>How it works</h2>
-		<p class="lede">A launch keeps its own version of every asset on it. You edit those versions, preview them without touching what is live, and publish them together.</p>
+		<p class="lede">Adding an asset to a launch makes a draft from the version you pick. You edit that draft, preview it without touching what is live, and mark it ready. A launch publishes only once every draft on it is ready, and only then is a version written. Any number of launches can hold drafts of the same asset at once.</p>
 		<figure data-tab="Two assets">
 			<div class="figure-head">
 				<h3>Two assets, two launches, step by step</h3>
 				<div class="legend">
 					<span class="l"><b>Your launch</b> made it</span>
 					<span class="a"><b>Another launch</b> made it</span>
+					<span class="y"><b>Ready</b> to publish</span>
 					<span class="r"><b>Published</b> version</span>
 				</div>
 			</div>
 			<div class="ops-steps" id="ops-steps" role="group" aria-label="Launch operations"></div>
 			<div class="scroller">
-				<svg class="ops" id="ops" role="img" aria-label="Two assets, each drawn as a line of versions: asset 1 joins a launch and asset 2 does not. Branching from the published version adds a draft version the launch owns. Publishing marks that same version published and freezes the launch. A second launch branches from it and publishes its own version, which leaves the first launch superseded."></svg>
+				<svg class="ops" id="ops" role="img" aria-label="Two assets, each drawn as a line of versions, with a line of drafts under asset 1: asset 1 joins a launch and asset 2 does not. Adding asset 1 makes a draft from its published version, and the launch edits that draft and marks it ready. Publishing writes the draft as a new version, v3, and freezes the launch. A second launch makes its own draft from v3 and publishes it as v4, which leaves the first launch superseded."></svg>
 			</div>
 			<figcaption class="ops-caption" id="ops-note"></figcaption>
 		</figure>
@@ -780,12 +798,13 @@
 				<div class="legend">
 					<span class="l"><b>Launch 1</b> made it</span>
 					<span class="a"><b>Launch 2</b> made it</span>
+					<span class="y"><b>Ready</b> to publish</span>
 					<span class="r"><b>Published</b> version</span>
 				</div>
 			</div>
 			<div class="ops-steps" id="ops2-steps" role="group" aria-label="Two launches over one asset"></div>
 			<div class="scroller">
-				<svg class="ops" id="ops2" role="img" aria-label="One asset drawn as a line of versions. Launch 1 branches a draft, v3, off the published v2, and launch 2 branches its own draft, v4, off the same v2. Launch 2 publishes first, so v4 is marked published as it stands. When launch 1 publishes, its draft is no longer the latest, so a new version, v5, is written from v3 and marked published, and launch 2 reads superseded."></svg>
+				<svg class="ops" id="ops2" role="img" aria-label="One asset drawn as a line of versions, with launch 2's draft above it and launch 1's draft below it. Both drafts are made from the published v2 and edited side by side. Launch 2 marks its draft ready and publishes first, which writes it as v3, while launch 1\'s draft is not ready yet. Launch 1 marks its draft ready and publishes next, which writes its draft as v4, and launch 2 reads superseded."></svg>
 			</div>
 			<figcaption class="ops-caption" id="ops2-note"></figcaption>
 		</figure>
@@ -857,11 +876,11 @@
 		<ol class="gaps">
 			<li>
 				<h3>Let a draft belong to a version, not to the item</h3>
-				<p>Only one draft can exist per item today, which is why a launch adds a whole item of its own: <code>addLayout</code>, <code>addArticle</code>, <code>addFragmentEntry</code>. Held per version, an item could carry one draft for every launch in flight.</p>
+				<p>Only one draft can exist per item today, which is why a launch adds a whole item of its own: <code>addLayout</code>, <code>addArticle</code>, <code>addFragmentEntry</code>. Made from a version and held by a launch, a draft would let an item carry one for every launch in flight.</p>
 			</li>
 			<li>
-				<h3>Promote that draft on publish</h3>
-				<p>Publishing would mark the draft the launch has held all along as published, rather than copying its content back onto the item and deleting it. What was reviewed would be what ships.</p>
+				<h3>Write that draft as a version on publish</h3>
+				<p>Publishing would write the draft the launch has held all along as the item's next version, rather than copying a whole item's content back and deleting it. Until then no version is written, and what was reviewed would be what ships.</p>
 			</li>
 			<li>
 				<h3>Give a page version something to render</h3>
@@ -910,7 +929,7 @@
 					<tbody>
 						<tr>
 							<th scope="row"><span class="axis">The unit</span>Ship the redesigned home page</th>
-							<td class="l win"><strong>An asset version.</strong> Add <em>Home Page</em> v3 to the launch. An entry is an item plus a version, and there is nothing smaller to reason about.</td>
+							<td class="l win"><strong>An asset draft.</strong> Add <em>Home Page</em> to the launch from v3 and edit the draft it gets. An entry is an item, the version it started from and its draft, and there is nothing smaller to reason about.</td>
 							<td class="p"><strong>A changed row.</strong> Review everything the edit produced: layout, structure, friendly URL, fragment links, portlet preferences. Every table with a <code>ctCollectionId</code> contributes its own entries.</td>
 						</tr>
 						<tr>
@@ -920,7 +939,7 @@
 						</tr>
 						<tr>
 							<th scope="row"><span class="axis">Rollback</span>Undo the new hero banner</th>
-							<td class="l win"><strong>A choice, not a diff.</strong> A new launch names <em>Hero Banner</em> v2 and publishes it. The rows underneath follow.</td>
+							<td class="l win"><strong>A choice, not a diff.</strong> A new launch makes a draft from <em>Hero Banner</em> v2 and publishes it unchanged. The rows underneath follow.</td>
 							<td class="p"><strong>A reverse merge.</strong> Locate every row the fragment edit produced and revert each one, in an order the reviewer has to trust the tool to get right.</td>
 						</tr>
 						<tr>
@@ -1154,6 +1173,8 @@
 
 		var STATE_COLORS = { live: 'var(--ok-ink)', superseded: 'var(--pub-ink)' };
 
+		var READY_COLORS = { mine: 'var(--launch-ink)', theirs: 'var(--alt-ink)' };
+
 		var WALK_MS = 500;
 
 		/**
@@ -1248,6 +1269,20 @@
 					return 'M' + a.x + ' ' + (a.y + 12) + ' V' + (b.y - 12);
 				}
 
+				/* A draft sits on a lane of its own, so the link that makes it
+				 * and the link that publishes it both bend between lanes. One
+				 * that leaves a node downwards starts under its label. */
+
+				if (link.kind === 'branch') {
+					var down = b.y > a.y;
+					var y0 = down ? a.y + ((a.label === null) ? 12 : 40) : a.y - 12;
+					var y1 = down ? b.y - 12 : b.y + ((b.label === null) ? 12 : 40);
+					var mid = (y0 + y1) / 2;
+
+					return 'M' + a.x + ' ' + y0 + ' C ' + a.x + ' ' + mid + ', ' +
+						b.x + ' ' + mid + ', ' + b.x + ' ' + y1;
+				}
+
 				if (link.kind === 'curve') {
 					return 'M' + (a.x + 12) + ' ' + a.y + ' Q' + b.x + ' ' +
 						a.y + ' ' + b.x + ' ' + (b.y + 12);
@@ -1328,6 +1363,23 @@
 							d: 'M-5.4 5.4 L-4 2.6 L-2.6 4 Z'
 						},
 						pencil);
+				}
+
+				/* A draft its launch has marked ready to publish trades the
+				 * pencil for a check in the launch's colour. */
+
+				if (node.ready !== undefined) {
+					var ready = el(
+						'g',
+						{
+							'class': 'ready-mark ready-' + node.style,
+							transform: 'translate(' + (node.x + 9) + ' ' +
+								(node.y + 9) + ')'
+						},
+						g);
+
+					el('circle', { cx: 0, cy: 0, r: 6.5 }, ready);
+					el('path', { d: 'M-2.8 0.1 L-1 2 L2.9 -2.2' }, ready);
 				}
 
 				node.group = g;
@@ -1417,15 +1469,24 @@
 
 				config.nodes.forEach(function (node) {
 					var shown = highlight.indexOf(node.key) !== -1;
+					var ready = (node.ready !== undefined) && (node.ready <= i);
 
 					node.group.classList.toggle(
 						'editing',
-						(node.pencil !== undefined) && (node.pencil <= i));
+						(node.pencil !== undefined) && (node.pencil <= i) &&
+							!ready);
+					node.group.classList.toggle('is-ready', ready);
 					node.halo.classList.toggle('on', shown);
 
 					if (node.labelNode) {
 						node.labelNode.style.fill =
-							STATE_COLORS[(step.states || {})[node.key]] || '';
+							STATE_COLORS[(step.states || {})[node.key]] ||
+								(ready ? READY_COLORS[node.style] : '');
+
+						if (node.ready !== undefined) {
+							node.labelNode.textContent =
+								ready ? 'ready' : node.label;
+						}
 					}
 				});
 
@@ -1540,17 +1601,23 @@
 		}
 
 		figure({
-			height: 208,
+			height: 300,
 			id: 'ops',
 			labelX: 68,
 			lanes: [
-				{ key: 'one', label: 'Asset 1', y: 68 },
-				{ key: 'two', label: 'Asset 2', y: 158 }
+				{ key: 'one', label: 'Asset 1', y: 40 },
+				{ key: 'drafts', label: 'Drafts', y: 150 },
+				{ key: 'two', label: 'Asset 2', y: 250 }
 			],
 			links: [
-				{ a: 'v2', b: 'v3', from: 1, lift: 60, style: 'mine' },
+				{ a: 'v2', b: 'd1', from: 1, kind: 'branch', style: 'mine' },
+				{ a: 'd1', b: 'v3', from: 6, kind: 'branch', style: 'mine' },
 				{
-					a: 'v3', b: 'v4', from: 6, late: true, lift: 60,
+					a: 'v3', b: 'd2', from: 7, kind: 'branch', late: true,
+					style: 'theirs'
+				},
+				{
+					a: 'd2', b: 'v4', from: 7, kind: 'branch', late: true,
 					style: 'theirs'
 				}
 			],
@@ -1558,12 +1625,21 @@
 				{ from: 0, key: 'v1', lane: 'one', style: 'base', x: 102 },
 				{ from: 0, key: 'v2', lane: 'one', style: 'base', x: 202 },
 				{
-					from: 1, key: 'v3', lane: 'one', pencil: 2, style: 'mine',
-					x: 302
+					from: 1, key: 'd1', label: 'draft', lane: 'drafts', pencil: 2,
+					ready: 5, style: 'mine', until: 5, x: 252
 				},
 				{
-					from: 6, key: 'v4', lane: 'one', late: true, pencil: 6,
-					style: 'theirs', x: 402
+					from: 6, key: 'd1-done', label: 'draft', lane: 'drafts',
+					style: 'gone', x: 252
+				},
+				{ from: 6, key: 'v3', lane: 'one', style: 'mine', x: 302 },
+				{
+					from: 7, key: 'd2', label: 'draft', lane: 'drafts', late: true,
+					style: 'gone', x: 352
+				},
+				{
+					from: 7, key: 'v4', lane: 'one', late: true, style: 'theirs',
+					x: 402
 				},
 				{ from: 0, key: 'w1', lane: 'two', style: 'base', x: 102 },
 				{ from: 0, key: 'w2', lane: 'two', style: 'base', x: 202 }
@@ -1577,12 +1653,12 @@
 				{
 					heads: { one: 'v2', two: 'w2' },
 					label: 'Add to launch',
-					note: 'Branching off v2 writes a new version, v3, and the launch is the only thing pointing at it. v2 is never touched and stays published.'
+					note: 'Adding asset 1 picks v2 and makes a draft from it. The draft belongs to the launch, not to the history: no version is written, and v2 stays published.'
 				},
 				{
 					heads: { one: 'v2', two: 'w2' },
 					label: 'Edit',
-					note: 'The entry opens v3, so the campaign is written there. v3 stays a draft and v2 stays published, so visitors see no change.'
+					note: 'Editors write the campaign into the launch\'s draft, as often as they like. The history does not grow with each save, and visitors see no change.'
 				},
 				{
 					connect: ['v2', 'w2'],
@@ -1590,27 +1666,32 @@
 					highlight: ['v2', 'w2'],
 					label: 'Live',
 					mode: 'live',
-					note: 'The edit changed nothing for visitors. A visitor gets the published version of every asset: v2 for asset 1, w2 for asset 2.'
+					note: 'The edits changed nothing for visitors. A visitor gets the published version of every asset: v2 for asset 1, w2 for asset 2.'
 				},
 				{
-					connect: ['v3', 'w2'],
+					connect: ['d1', 'w2'],
 					heads: { one: 'v2', two: 'w2' },
-					highlight: ['v3', 'w2'],
+					highlight: ['d1', 'w2'],
 					label: 'Preview',
 					mode: 'preview',
-					note: 'Preview renders the site for you only, differing from what visitors get by exactly one version: asset 1 comes from v3, while asset 2, outside the launch, still comes from w2.'
+					note: 'Preview renders the site for you only, differing from what visitors get by exactly one asset: asset 1 comes from the launch\'s draft, while asset 2, outside the launch, still comes from w2.'
+				},
+				{
+					heads: { one: 'v2', two: 'w2' },
+					label: 'Mark ready',
+					note: 'The editors mark the draft ready to publish, and the pencil goes down. The launch cannot be published while any draft on it is still being edited: this one is its only draft, so it can now.'
 				},
 				{
 					heads: { one: 'v3', two: 'w2' },
 					label: 'Publish',
-					note: 'No version is written. The draft the launch has held all along becomes the version the site serves, and the launch freezes with it: no entry, version or draft moves again.',
+					note: 'Only now is a version written: the ready draft becomes v3, the version the site serves, and the launch freezes with it. No entry, version or draft moves again.',
 					states: { v3: 'live' }
 				},
 				{
 					alt: true,
 					heads: { one: 'v4', two: 'w2' },
 					label: 'Another launch publishes',
-					note: 'Another launch branched v4 off v3 and published it, so v4 is what the site serves. Your launch still names v3 and reads superseded, with nothing left to press.',
+					note: 'Another launch made its own draft from v3, marked it ready and published it, which wrote v4. Your launch still names v3 and reads superseded, with nothing left to press.',
 					states: { v3: 'superseded', v4: 'live' }
 				}
 			],
@@ -1618,30 +1699,41 @@
 		});
 
 		figure({
-			height: 148,
+			height: 300,
 			id: 'ops2',
 			labelX: 68,
-			lanes: [{ key: 'one', label: 'Asset 1', y: 96 }],
+			lanes: [
+				{ key: 'two', label: 'Launch 2', y: 30 },
+				{ key: 'one', label: 'Asset 1', y: 140 },
+				{ key: 'mine', label: 'Launch 1', y: 240 }
+			],
 			links: [
-				{ a: 'v2', b: 'v3', from: 1, lift: 52, style: 'mine' },
-				{ a: 'v2', b: 'v4', from: 2, lift: 100, style: 'theirs' },
-				{ a: 'v3', b: 'v5', dashed: true, from: 4, lift: 52, style: 'mine' }
+				{ a: 'v2', b: 'd1', from: 1, kind: 'branch', style: 'mine' },
+				{ a: 'v2', b: 'd2', from: 2, kind: 'branch', style: 'theirs' },
+				{ a: 'd2', b: 'v3', from: 4, kind: 'branch', style: 'theirs' },
+				{ a: 'd1', b: 'v4', from: 6, kind: 'branch', style: 'mine' }
 			],
 			nodes: [
 				{ from: 0, key: 'v1', lane: 'one', style: 'base', x: 102 },
 				{ from: 0, key: 'v2', lane: 'one', style: 'base', x: 177 },
 				{
-					from: 1, key: 'v3', lane: 'one', pencil: 1, style: 'mine',
-					x: 252
+					from: 1, key: 'd1', label: 'draft', lane: 'mine', pencil: 1,
+					ready: 5, style: 'mine', until: 5, x: 240
 				},
 				{
-					from: 2, key: 'v4', lane: 'one', pencil: 2, style: 'theirs',
-					x: 327
+					from: 6, key: 'd1-done', label: 'draft', lane: 'mine',
+					style: 'gone', x: 240
 				},
 				{
-					from: 4, key: 'v5', lane: 'one', pencil: 4, style: 'mine',
-					x: 402
-				}
+					from: 2, key: 'd2', label: 'draft', lane: 'two', pencil: 2,
+					ready: 3, style: 'theirs', until: 3, x: 240
+				},
+				{
+					from: 4, key: 'd2-done', label: 'draft', lane: 'two',
+					style: 'gone', x: 240
+				},
+				{ from: 4, key: 'v3', lane: 'one', style: 'theirs', x: 302 },
+				{ from: 6, key: 'v4', lane: 'one', style: 'mine', x: 402 }
 			],
 			steps: [
 				{
@@ -1652,26 +1744,38 @@
 				{
 					heads: { one: 'v2' },
 					label: 'Launch 1 created',
-					note: 'Launch 1 adds the asset and branches a draft of its own, v3. v2 is untouched and stays published.'
+					note: 'Launch 1 adds the asset from v2 and gets a draft of its own to edit. No version is written, and v2 stays published.'
 				},
 				{
 					alt: true,
 					heads: { one: 'v2' },
 					label: 'Launch 2 created',
-					note: 'Launch 2 adds the same asset and branches its own draft. v3 and v4 are siblings off the published version, neither aware of the other, and the site still serves v2.'
+					note: 'Launch 2 adds the same asset from the same v2 and gets a second draft. The two drafts are edited side by side, neither aware of the other, and the site still serves v2.'
 				},
 				{
 					alt: true,
-					heads: { one: 'v4' },
-					label: 'Launch 2 publishes',
-					note: 'No version is written: v4 becomes what the site serves and launch 2 reads live. Launch 1 has not moved, and its draft v3 now sits behind the published version.',
-					states: { v4: 'live' }
+					heads: { one: 'v2' },
+					label: 'Launch 2 ready',
+					note: 'Launch 2 marks its draft ready to publish, so launch 2 can be published. Launch 1\'s draft is still being edited, so launch 1 cannot: each launch waits only on its own drafts.'
 				},
 				{
-					heads: { one: 'v5' },
+					alt: true,
+					heads: { one: 'v3' },
+					label: 'Launch 2 publishes',
+					note: 'Launch 2\'s ready draft is written as a new version, v3, which the site now serves, and launch 2 reads live. Launch 1\'s draft is untouched: it is still a draft made from v2, and still not ready.',
+					states: { v3: 'live' }
+				},
+				{
+					heads: { one: 'v3' },
+					label: 'Launch 1 ready',
+					note: 'Launch 1 marks its draft ready too, so launch 1 can now be published. Its draft was made from v2 and is still behind the published v3.',
+					states: { v3: 'live' }
+				},
+				{
+					heads: { one: 'v4' },
 					label: 'Launch 1 publishes',
-					note: 'v3 is no longer the latest approved, so it cannot be marked published. Launch 1\'s one publish copies it into a new version, v5, and marks that. Launch 2 now reads superseded.',
-					states: { v4: 'superseded', v5: 'live' }
+					note: 'Launch 1\'s ready draft is written as v4 the same way. It was made from v2, so v4 carries launch 1\'s edits and none of launch 2\'s. Launch 2 now reads superseded.',
+					states: { v3: 'superseded', v4: 'live' }
 				}
 			],
 			width: 432
