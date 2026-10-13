@@ -1,0 +1,49 @@
+<div class="app">
+  <div class="bar"><div class="bar-inner"><div class="brand">
+    <h1>Headless Daily</h1>
+    <div class="sub"><span>__SPRINT__</span><span class="dot"></span><span>__REMAINING__d remaining</span><span class="dot"></span><span>__DATE__</span><span class="dot"></span><a class="key" href="https://script.google.com/a/macros/liferay.com/s/AKfycbxQokevgQRtL9ZgGOUrUvqGincV_Wjms-kmnyTWpripURRdp2Ue9dv96neBq7OGlEyJXw/exec" target="_blank" rel="noopener">open full width ↗</a></div>
+    <div class="sub"><span id="liveNote" class="live-note" hidden></span></div>
+  </div>
+  <div class="theme-switch" role="group" aria-label="Colour theme">
+    <button type="button" data-theme-set="system" aria-pressed="true" title="Follow your computer's setting">System</button>
+    <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+    <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+  </div></div></div>
+
+  <div class="wrap wide">
+    <div class="metrics two" id="metrics"></div>
+
+    <nav class="tabs">
+      <button class="tab on" data-p="p1a">1a · Needs Attention <span class="tc" data-c="s1a"></span></button>
+      <button class="tab" data-p="p1b">1b · Not in Iteration <span class="tc" data-c="s1b"></span></button>
+      <button class="tab" data-p="p1h">1c · High Cycle Time <span class="tc" data-c="s1h"></span></button>
+      <button class="tab" data-p="p2a">2a · Pick Up Next · Needs Owner <span class="tc" data-c="s2a"></span></button>
+      <button class="tab" data-p="p2b">2b · Pick Up Next · Assigned <span class="tc" data-c="s2b"></span></button>
+      <button class="tab" data-p="pms">3 · Milestone status</button>
+      <button class="tab" data-p="pt">4 · Tests</button>
+    </nav>
+
+    <div class="panel" id="p1a"><p class="sec-sub">In progress: all unplanned work, plus planned work with a PR that needs something (review, reviewer, merge, changes).</p><div id="t1a"></div></div>
+    <div class="panel" id="p1b" hidden><div id="t1b"></div></div>
+    <div class="panel" id="p1h" hidden><p class="sec-sub">Planned work in progress with a high cycle time and no PR action. Stories first, then tasks, then other types, spikes last; longest cycle time first.</p><div id="t1h"></div></div>
+    <div class="panel" id="p2a" hidden><p class="sec-sub">Pick a person → <b>Assign</b> sets the assignee in Jira.</p><div id="t2a"></div></div>
+    <div class="panel" id="p2b" hidden><div id="t2b"></div></div>
+
+    <div class="panel" id="pms" hidden>
+      <div class="metrics" id="avd"></div>
+      <p class="sec-sub" id="wipNote"></p>
+      <h3 class="sub-h">1. Milestone commitment <span class="count" id="cCom"></span><span class="hint2">Fix Version = <span id="msName"></span></span></h3>
+      <div id="tCom"></div>
+      <h3 class="sub-h">2. Not committed for the milestone, but active <span class="count" id="cNot"></span><span class="hint2">epic in an active status without the milestone Fix Version (discovery epics excluded)</span></h3>
+      <div id="tNot"></div>
+    </div>
+
+    <div class="panel" id="pt" hidden>
+      <p class="sec-sub">Snapshot of <a class="key" href="https://liferay.atlassian.net/wiki/spaces/ENGHEADLESS/pages/5096669324/Headless+Testray+Regression+Tracking" target="_blank" rel="noopener">Headless Testray Regression Tracking ↗</a>, taken at publish time.</p>
+      <div class="tr-snap">__TESTRAY__</div>
+    </div>
+
+    <details class="excl"><summary>Planned work not shown in any tab (<span id="hidCount"></span>) — no PR action, normal cycle time</summary><div id="tHid"></div></details>
+    <details class="excl"><summary>Exclusions (<span id="exclCount"></span>)</summary><table class="mini"><tbody id="exclBody"></tbody></table></details>
+  </div>
+</div>
