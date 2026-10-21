@@ -4548,7 +4548,7 @@ def _sort_section1(rows: list[dict]) -> list[dict]:
     Sort Section 1 rows by tier_num ascending, then by days.
     (PR rows no longer live in Section 1 — they surface in Pick Up Next.)
       1. Issues by tier_num ascending
-      2. Secondary: for planned tiers (12, 13) by days ascending; others by days descending
+      2. Secondary: days descending — oldest first inside the same tier, planned and unplanned alike (2026-10-21)
     """
     def _sort_key(row: dict) -> tuple:
         tier_num = row.get("_tier_num", 99.0)
@@ -4559,9 +4559,8 @@ def _sort_section1(rows: list[dict]) -> list[dict]:
         days_match = re.search(r"^(\d+)d", days_cell)
         days = int(days_match.group(1)) if days_match else 0
 
-        planned = tier_key in ("12", "13")
-        # planned: ascending days (oldest first for catch-up); unplanned: descending
-        days_sort = days if planned else -days
+        # 2026-10-21 (per Nóra): inside the same tier, oldest (most days) first — planned and unplanned alike
+        days_sort = -days
 
         return (tier_num, days_sort)
 
@@ -4603,8 +4602,8 @@ def _sort_section2_prs(rows: list[dict]) -> list[dict]:
 
 def _sort_section2(rows: list[dict]) -> list[dict]:
     """
-    Sort Section 2 rows by tier ascending, secondary by heat_score descending (LPP)
-    or days ascending (others).
+    Sort Section 2 rows by tier ascending, then heat_score descending (LPP only),
+    then days descending — oldest first inside the same tier (2026-10-21).
     """
     def _sort_key(row: dict) -> tuple:
         tier_num = row.get("_tier_num", 99.0)
@@ -4622,9 +4621,10 @@ def _sort_section2(rows: list[dict]) -> list[dict]:
         except ValueError:
             heat = 0.0
 
-        heat_sort = -heat if project == "LPP" else days
+        # 2026-10-21 (per Nóra): LPP keeps heat score first; then oldest (most days) first for everyone
+        heat_sort = -heat if project == "LPP" else 0.0
 
-        return (tier_num, heat_sort)
+        return (tier_num, heat_sort, -days)
 
     return sorted(rows, key=_sort_key)
 

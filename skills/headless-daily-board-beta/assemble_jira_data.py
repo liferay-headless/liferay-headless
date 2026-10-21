@@ -85,8 +85,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sprint-file", action="append", required=True,
                     help="MCP result file(s) for the sprint issues query (repeatable for pages)")
-    ap.add_argument("--sev-file", required=True, help="MCP result file for the SEV bugs query")
-    ap.add_argument("--bpr-file", required=True, help="MCP result file for the SEV BPRs query")
+    ap.add_argument("--sev-file", action="append", required=True, help="MCP result file(s) for the SEV bugs query — repeat once per page (2026-10-16: was single-file, extra pages were silently dropped)")
+    ap.add_argument("--bpr-file", action="append", required=True, help="MCP result file(s) for the SEV BPRs query — repeat once per page")
     ap.add_argument("--out", default="jira_data.json", help="Output path (default: jira_data.json)")
     ap.add_argument("--expected-count", type=int, default=None,
                     help="True total for the sprint filter, from a computeIssueCount call. "
@@ -160,8 +160,17 @@ def main() -> None:
                  f"Fetch the next page with nextPageToken={page_info.get('endCursor')!r} "
                  f"and pass it as an additional --sprint-file. Do NOT proceed with partial data.")
 
-    sev_issues, sev_page = load_issues(Path(args.sev_file))
-    bpr_issues, bpr_page = load_issues(Path(args.bpr_file))
+    def load_pages(paths):
+        allis, last, seen_k = [], {}, set()
+        for p in paths:
+            iss, last = load_issues(Path(p))
+            for i in iss:
+                k = i.get("key")
+                if k not in seen_k:
+                    seen_k.add(k); allis.append(i)
+        return allis, last
+    sev_issues, sev_page = load_pages(args.sev_file)
+    bpr_issues, bpr_page = load_pages(args.bpr_file)
     if sev_page.get("hasNextPage"):
         fail("SEV bugs result has hasNextPage=true — fetch remaining pages first.")
     if bpr_page.get("hasNextPage"):
