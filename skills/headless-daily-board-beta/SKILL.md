@@ -3,7 +3,7 @@ name: "headless-daily-board-beta"
 description: "BETA of the Headless Daily Actions Report with a new output: a tabbed board (progress bars, numbered tabs 1a/1b/1c/2a/2b, milestone status, tests) instead of the Confluence report page. Runs on its own (same data collection and same shared context page as the daily actions report). Use only when the user asks for the board beta / headless-daily-board-beta."
 ---
 
-# Headless Daily Board — BETA (v0.17.1-beta)
+# Headless Daily Board — BETA (v0.17.4-beta)
 
 > **What this skill is:** the full Headless Daily Actions Report pipeline — data collection, files, the shared
 > context page (run memory: Sprint Metadata, rosters, Changelog Cache, State Snapshot, PR Snapshot, Slack Thread
@@ -18,7 +18,18 @@ description: "BETA of the Headless Daily Actions Report with a new output: a tab
 > - **The run memory is saved automatically right after the board is delivered** (Step 2), before the approval
 >   gate — never wait for the publish or the approval to save it. (The old skill's memory page went stale from 2026-09-24 because that final
 >   save was skipped.)
+> - **AVD metrics are stored, not re-typed (v0.17.2):** section 3 always shows the last known AVD numbers from the
+>   shared context page with "Number not changed since <date>", and every run asks Nóra whether there are new ones (Step 1c).
+> - **Blockers are shown on the row (v0.17.3):** every issue with an open "Is blocked by" link in Jira gets a
+>   "🔒 Blocked by KEY summary (status)" note in Other updates, and a bare "Start" action becomes "Wait — blocked".
+>   When the blocker is done the note turns into "✅ Unblocked — … can start". Comes from the `issuelinks` already in
+>   jira_data.json — no extra calls. A blocker added to Jira after the morning fetch only shows on the next run
+>   (or re-fetch that one issue and put it first in `--sprint-file`).
 > - **Live status (v0.17.0):** on the Google Site the board refreshes Jira statuses and PR states when it opens, via `liveStatus()` in `Live.gs` (ships with this skill; installed once in the Apps Script project next to Code.gs). Nothing to do per run.
+> - **Oldest first inside each priority (v0.17.4):** inside the same priority tier, rows that have been in our queue
+>   longest come first (most days first) — 1a/1c, 2a Needs Owner and 2b Assigned alike (e.g. SEV tickets 6d → 3d → 1d).
+>   LPP rows in Pick Up Next still sort by heat score first, then oldest first. Built into `headless_daily_report.py`
+>   (`_sort_section1`, `_sort_section2`) — nothing to do per run.
 > Everything else (Step 0 context sync, Step 1 collection, 1a/1b, guardrails, budget checkpoints) applies as written.
 
 
@@ -605,7 +616,22 @@ changelogs here; no subagent needed (~5 + 3×epics small calls). Budget checkpoi
 1. `python3 board.py --plan` → run calls A–C in parallel; then `python3 board.py --plan --epic-keys <keys from A>`
    → run D–E in parallel. If `--plan` reports more than 25 epics, stop and ask.
 2. Write `WORK_DIR/epics.json` exactly in the format `--plan` prints, and the Testray page body to
-   `WORK_DIR/testray.html`. AVD numbers come **manually from Nóra** (e.g. "AVD: story 22, epic 80, handoff 10, WIP 13", optionally with outlier keys); if given, save `WORK_DIR/avd.json`; if not, leave the tiles as "?" and do not try to read the AVD site (format in the board.py header).
+   `WORK_DIR/testray.html`.
+   **AVD metrics (section 3) — stored, never "?" (2026-10-16, per Nóra).** The four AVD numbers live in the
+   `## AVD Metrics` section of the shared context page (synced into `WORK_DIR/context_scratch.md` in Step 0), e.g.
+   `{"story": {"value": 45, "since": "2026-10-16"}, "epic": {"value": 119, "since": "2026-10-16"}, "handoff": {"value": 72.7, "since": "2026-10-16"}, "wip": {"value": 13, "since": "2026-10-16"}, "last_reviewed": "2026-10-16"}`
+   (`since` = the date that number last changed; goals are fixed in the board: story 15d, epic 65d, handoff 24d, WIP ≤ 18).
+   - **Ask on every run, before building:** show Nóra the stored numbers with their dates and ask with AskUserQuestion
+     whether there are new AVD numbers (options: "No change — keep these" / "Yes — I'll paste the new numbers").
+     If the run is unattended, don't block: use the stored numbers and put the question in the run summary instead.
+   - **New numbers:** update only the metrics whose value changed, and set their `since` to today. Unchanged metrics keep
+     their old `since`. Set `last_reviewed` to today either way. Never read the AVD site yourself.
+   - **Write `WORK_DIR/avd.json` on every run** from the stored section:
+     `{"story": {"value": 45, "basis": "Number not changed since 2026-10-16"}, "epic": {...}, "handoff": {...}, "wip": {...}}`
+     (the `basis` text is what the tile shows under the number; optional `outliers` as in the board.py header).
+     Only if the section is missing or empty, leave the tiles as "?" and tell Nóra.
+   - The `## AVD Metrics` section is saved back to the shared page with the rest of the run memory in Step 2 —
+     `--confirm-publish` passes unknown sections through unchanged, so edit it in `WORK_DIR/context_scratch.md` before that step.
 3. `python3 board.py --build --work-dir WORK_DIR --report-html <the daily_actions_report_<date>.html written in Step 1> --jira-data-file WORK_DIR/jira_data.json`
    (`WORK_DIR/context_scratch.md` is picked up automatically: its Account IDs + Team GitHub Logins feed the Assign
    buttons, which only work on the Google Site — the Apps Script there updates Jira and GitHub.)
@@ -622,7 +648,8 @@ changelogs here; no subagent needed (~5 + 3×epics small calls). Budget checkpoi
    (contentFormat markdown) — the shared context page 5190975505. Confirm the call succeeded; if it fails, say so
    clearly (the next run would otherwise compare against stale data).
 4. Run summary for the user — the data quality summary below, the board tab counts (1a, 1b, 1c, folded, 2a, 2b), the
-   count-check result, the iteration-check line and "memory saved ✅ / ❌".
+   count-check result, the iteration-check line, the AVD numbers used (with "not changed since" dates, and the
+   "any new AVD numbers?" question if it could not be asked earlier) and "memory saved ✅ / ❌".
 5. **⛔ Approval gate:** ask "Publish this board to the Google Site?" and **stop**. Do not go to Step 3 without an explicit yes.
    If the user asks for changes or reports a problem, see Step 4. (Token budget checkpoint 4 from Run Budget Guardrails applies here.)
 

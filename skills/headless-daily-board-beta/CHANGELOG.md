@@ -1,5 +1,13 @@
 # Changelog — headless-daily-board-beta
 
+## 0.17.4-beta (2026-10-21)
+- Oldest first inside each priority (per Nóra): `_sort_section1` and `_sort_section2` in `headless_daily_report.py` now sort rows of the same tier by days descending — the ticket that has been in our queue longest comes first. Before, planned rows in Section 1 and all non-LPP rows in Pick Up Next were youngest-first (e.g. 2a SEV tickets showed 1d, 2d, 3d, 6d). LPP rows in Pick Up Next keep heat score as the first key, then oldest first. 1b, 1c and PR rows were already longest-first.
+
+## 0.17.3-beta (2026-10-16)
+- Blockers on the board: rows whose Jira issue has an open "Is blocked by" link show "🔒 Blocked by KEY summary (status)" in Other updates; a plain "Start" action becomes "Wait — blocked". A finished blocker shows "✅ Unblocked — … can start". Data comes from issuelinks already in jira_data.json (first case: LPD-109497 blocked by Frontend Infra's LPD-109695).
+- `assemble_jira_data.py` now accepts `--sev-file` / `--bpr-file` once per page and merges them. Before, only the last page was used, so with 124 open security bugs (2 pages) the first 100 were silently dropped (found 2026-10-16).
+- AVD metrics (section 3) are stored on the shared context page (`## AVD Metrics`, with a "since" date per number), shown every run with "Number not changed since <date>", and each run asks Nóra whether there are new numbers (SKILL.md Step 1c).
+
 ## 0.17.1-beta (2026-10-13)
 - Live status never stays on "loading…": after 30 s the header says "Live status not answering"; a Jira- or GitHub-only failure is shown in the header ("Jira not reachable" / "GitHub not reachable").
 - Live.gs install note: paste into a Script file (not HTML), save, run testLiveStatus with Live.gs open (the function dropdown lists the open file's functions), then deploy a New version.

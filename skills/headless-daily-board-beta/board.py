@@ -32,7 +32,7 @@ import argparse, html, json, re, sys
 from datetime import date
 from pathlib import Path
 
-BOARD_VERSION = "0.17.1-beta"
+BOARD_VERSION = "0.17.4-beta"
 HERE = Path(__file__).parent
 
 # ── Configuration (edit here, not in SKILL.md) ─────────────────────────────
@@ -178,6 +178,16 @@ def summaries_from_jira_data(path):
                        "status_cat": ((f.get("status") or {}).get("statusCategory") or {}).get("key", "")}
                 # merge: an issue can appear several times (top level, as a parent, in issuelinks);
                 # keep every non-empty value instead of letting a sparse nested reference win
+                # v0.17.3: open "is blocked by" links (Jira link type "Blocked", inward side)
+                blk = []
+                for l in f.get("issuelinks") or []:
+                    if ((l.get("type") or {}).get("name") == "Blocked") and l.get("inwardIssue"):
+                        bi = l["inwardIssue"]; bf = bi.get("fields") or {}; st = bf.get("status") or {}
+                        blk.append({"key": bi.get("key", ""), "summary": bf.get("summary", ""),
+                                    "status": st.get("name", ""),
+                                    "statusCat": (st.get("statusCategory") or {}).get("key", "")})
+                if blk:
+                    rec["blocked_by"] = blk
                 cur = out.setdefault(o["key"], {})
                 for k2, v2 in rec.items():
                     if v2 and not cur.get(k2):
@@ -285,6 +295,20 @@ def render(rep, info, milestone, it, epics, testray_html, avd, roster=None, prs=
             i = info.get(r["key"], {})
             r["summary"], r["type"] = i.get("summary", ""), i.get("type", "")
             r["status"], r["statusCat"] = i.get("status", ""), i.get("status_cat", "")
+            # v0.17.3: show every "is blocked by" issue with its live status, so we see when work can start
+            blk = i.get("blocked_by") or []
+            if blk:
+                r["blockedBy"] = blk
+                notes = []
+                for b in blk:
+                    done = b.get("statusCat") == "done"
+                    notes.append(("✅ Unblocked — " if done else "🔒 Blocked by ") +
+                                 f'<a href="https://liferay.atlassian.net/browse/{html.escape(b["key"])}" target="_blank" rel="noopener">{html.escape(b["key"])}</a> '
+                                 + html.escape(b.get("summary", "")) + f' ({html.escape(b.get("status", "?"))})'
+                                 + (" — can start" if done else ""))
+                if r["action"].strip() == "Start" and any(b.get("statusCat") != "done" for b in blk):
+                    r["action"] = "Wait — blocked"
+                r["action"] = (r["action"] + "<br><br>" if r["action"] else "") + "<br><br>".join(notes)
             # Standalone PR rows (v0.15.0): PR title + linked Jira key (and its status when known)
             mpr = re.match(r"PR#(\d+)$", r["key"])
             if mpr and prs and int(mpr.group(1)) in prs:
