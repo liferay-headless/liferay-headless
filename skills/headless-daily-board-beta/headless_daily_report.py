@@ -612,8 +612,10 @@ def save_sprint_context(ctx: SprintContext, path: Path) -> None:
         if not m:
             return text  # no Sprint Metadata section — leave untouched
         block = m.group(2)
-        line_pattern = re.compile(r"^- " + re.escape(key) + r":.*$", re.MULTILINE)
-        new_line = f"- {key}: {value}"
+        # 2026-11-03: match the line with or without a leading "- " (the Confluence markdown
+        # round-trip drops the dash), so the value is updated instead of a duplicate line being added.
+        line_pattern = re.compile(r"^(?:- )?" + re.escape(key) + r":.*$", re.MULTILINE)
+        new_line = f"{key}: {value}"
         if line_pattern.search(block):
             new_block_text = line_pattern.sub(new_line, block, count=1)
         else:
@@ -1271,6 +1273,12 @@ def should_exclude(issue: dict, sev_keys: set[str], ctx: "SprintContext") -> str
         headless_assignee = assignee_id in ctx.account_ids.values()
         if not (headless_team or headless_sprint or headless_assignee):
             return "Non-Headless LPD"
+        # ── Rule 5a (board beta 0.20.2, per Nóra 2026-11-13): another team's work by a shared
+        # person. When BOTH the Team field names a non-Headless team AND the issue has a sprint
+        # that is not an HL sprint, it belongs to that team even if the assignee is on our roster
+        # (e.g. David Aragonés's Platform Experience design tasks, PE|… sprint).
+        if team and not headless_team and sprint_name and not headless_sprint:
+            return f"Other team's LPD ({team}, {sprint_name.split('|')[0]} sprint)"
 
         # ── Rule 5b: non-sprint LPD not yet in progress (2026-08-26, per Nóra)
         # The sprint filter (54796) was widened 2026-08-26 to surface more
@@ -2520,7 +2528,7 @@ def _get_bpr_ofc_date(issue: dict, ctx: "SprintContext") -> str | None:
         created_str = history.get("created", "")[:10]
         for item in (history.get("items") or []):
             if item.get("field", "").lower() == "status":
-                to_val = (item.get("toString") or "").lower()
+                to_val = " ".join((item.get("toString") or "").lower().split())
                 if to_val == "original fix committed":
                     result = created_str
                     break
@@ -4993,6 +5001,8 @@ def main() -> None:
         # as a review request from another team. Its linked LPD is already kept
         # out of Section 1 by the non-Headless exclusion rule.
         if cross_team:
+            # Run-local (per Nóra): a cross-team PR that already has a Headless owner goes to Assigned.
+            _owned = bool(pr.get("has_owner"))
             pr_row = {
                 "type":        "pr",
                 "pr":          pr,
@@ -5005,6 +5015,8 @@ def main() -> None:
                 "days_cell":   compute_pr_days_active_cell(pr.get("open_days", 0)),
                 "action_text": _evaluate_standalone_pr_trigger(pr),
             }
+            if _owned:
+                pr_row["section"] = "2a"; section2a_pr_rows.append(pr_row); continue
             section2b_pr_rows.append(pr_row)
             print(f"  [rule3/cross_team] PR#{prnum} by {pr.get('author')} → top of 2b (cross-team review request)")
             continue
@@ -5048,8 +5060,8 @@ def main() -> None:
             "tier_key":    "SLACK",
             "_tier_num":   -1.0,
             "section":     "2b",
-            "days_cell":   f"{age_days}d — no reply",
-            "action_text": "❓ Slack question in #t-dxp-headless — no reply from the team yet",
+            "days_cell":   thread.get("days_cell") or f"{age_days}d — no reply",
+            "action_text": thread.get("action_text") or "❓ Slack question in #t-dxp-headless — no reply from the team yet",
         }
         section2b_slack_rows.append(row)
     section2b_slack_rows.sort(key=lambda r: -(r["slack"].get("age_days", 0) or 0))
@@ -5207,6 +5219,47 @@ def main() -> None:
                 section2a_rows.append(row)
             else:
                 section2b_rows.append(row)
+
+    # ── Manual corrections (board beta 0.19.0): HDB_OVERRIDES=<path to json> ─────────────────
+    #   {"exclude": {KEY: reason}, "force_section": {KEY: "2a"|"2b"}, "notes": {KEY: text},
+    #    "extra_standalone_prs": {PR_NUMBER: "2a"|"2b"}}
+    #   Internal codes: "2a" = Assigned, "2b" = Needs Owner (the board tabs show them the other way
+    #   round: board 2a = Needs Owner, board 2b = Assigned). A note starting with "=" replaces the
+    #   action text; otherwise it is appended. Applies to one run only — nothing is stored.
+    _ovp = os.environ.get("HDB_OVERRIDES")
+    if _ovp and Path(_ovp).exists():
+        _ov = json.loads(Path(_ovp).read_text())
+        _lists = {"1a": section1a_rows, "1b": section1b_rows, "2a": section2a_rows, "2b": section2b_rows}
+        def _rk(r): return (r.get("issue") or {}).get("key")
+        for _k, _why in (_ov.get("exclude") or {}).items():
+            for _l in _lists.values():
+                _l[:] = [r for r in _l if _rk(r) != _k]
+            excluded.append((_k, _why))
+            print(f"  [override] exclude {_k}")
+        for _k, _sec in (_ov.get("force_section") or {}).items():
+            for _src, _l in _lists.items():
+                if _src == _sec:
+                    continue
+                for r in list(_l):
+                    if _rk(r) == _k:
+                        _l.remove(r); r["section"] = _sec
+                        if _sec in ("2a", "2b"):
+                            r["days_cell"] = compute_days_queue_cell(r["issue"], ctx, section=_sec)
+                        _lists[_sec].append(r)
+                        print(f"  [override] {_k}: {_src} -> {_sec}")
+        for _k, _txt in (_ov.get("notes") or {}).items():
+            for _l in _lists.values():
+                for r in _l:
+                    if _rk(r) == _k:
+                        r["action_text"] = _txt[1:] if _txt.startswith("=") else ((r.get("action_text") or "") + " " + _txt).strip()
+        for _n, _sec in (_ov.get("extra_standalone_prs") or {}).items():
+            _pr = next((p for p in open_prs if str(p.get("pr_number")) == str(_n)), None)
+            if _pr:
+                _row = {"type": "pr", "pr": _pr, "tier_key": "PR", "_tier_num": 0.0, "section": _sec,
+                        "is_pr_row": True, "days_cell": compute_pr_days_active_cell(_pr.get("open_days", 0)),
+                        "action_text": _evaluate_standalone_pr_trigger(_pr)}
+                (section2a_pr_rows if _sec == "2a" else section2b_pr_rows).append(_row)
+                print(f"  [override] PR#{_n} standalone -> {_sec}")
 
     # ── 12. Sort ──────────────────────────────────────────────────────────────
     print("\n[Step 10] Sorting sections ...")

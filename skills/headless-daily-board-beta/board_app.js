@@ -48,20 +48,95 @@
   var committed = D.epics.filter(function(e){ return e.committed; });
   // Milestone progress weighted by T-shirt size (person-months): each epic counts with its size,
   // its done share = done/total stories (an epic with no stories counts as 0% done).
+  var F = ms && ms.forecast;
+  function dshort(s){ var p=s.split("-"); return (+p[2])+" "+MON[+p[1]-1]; }
+  if (F) {
+    // v0.20.0: Stories+Tasks, expected slices, partial credit for items in progress, weighted by T-shirt size
+    if (ms.start) top += scheduleMeter({label:ms.label, start:ms.start, end:ms.end, done: F.done}, "Milestone",
+      (Math.round(F.wDone*10)/10)+" of "+(Math.round(F.wTot*10)/10)+" person-months");
+    var pc = Math.round(F.probAll*100), fcls = pc>=70?"good":pc>=40?"warn":"crit";
+    var fcHtml = '<div class="meter fcast"><div class="meter-head"><span class="meter-lbl">Forecast · Monte Carlo, '+F.runs.toLocaleString("en")+' runs</span>'+
+      '<span class="meter-note '+fcls+'">'+pc+'% chance by '+dshort(F.deadline)+'</span></div>'+
+      '<div class="fc-row"><span><b>'+dshort(F.p50)+'</b> likely finish (50%)</span><span><b>'+dshort(F.p85)+'</b> safe finish (85%)</span>'+
+      '<span><b>'+F.itemsMedian+' of '+F.remaining+'</b> items done by '+dshort(F.deadline)+'</span></div>'+
+      '<div class="meter-foot"><span>'+F.doneItems+'/'+F.expected+' Stories+Tasks done · '+F.notCreated+' expected slices not in Jira yet · '+F.wip+' worked in parallel</span>'+
+      '<span title="Team Stories and Tasks completed '+esc(F.sampleFrom||"")+' – '+esc(F.sampleTo||"")+'">cycle time: median '+Math.round(F.ctMedian)+'d · 85% '+Math.round(F.ctP85)+'d ('+F.sample+' items)</span></div></div>';
+    // v0.20.0: the forecast lives on the Milestone status (Epic) tab only, above the epic tables
+    $("fcast").innerHTML = fcHtml; $("fcast").hidden = false;
+  } else {
   var wTot=0, wDone=0, noSize=0;
   committed.forEach(function(e){ var w = e.pm; if (w == null) { noSize++; w = 1; } wTot += w; wDone += w * (e.total ? (e.done||0)/e.total : 0); });
   var unsliced = committed.filter(function(e){ return !e.total; }).length;
   var msNote = [unsliced ? unsliced+" epic"+(unsliced>1?"s":"")+" not sliced yet" : "", noSize ? noSize+" without size" : ""].filter(Boolean).join(" · ");
   if (ms && ms.start) top += scheduleMeter({label:ms.label, start:ms.start, end:ms.end, done: wTot ? wDone/wTot : 0}, "Milestone",
     (Math.round(wDone*10)/10)+" of "+(Math.round(wTot*10)/10)+" person-months, by T-shirt size", msNote || null);
+  }
+  // LPP Time to Solution (75th percentile, days): Headless is the headline, all product teams the reference tick.
+  // Lower is better: the bar fills to the Headless value; the dark tick marks the all-teams value.
+  var L = D.lpp;
+  if (L && L.headless != null) {
+    var co = L.company, h = L.headless, scale = Math.max(h, co || 0) * 1.25 || 1;
+    var diff = co != null ? Math.round((co - h)*100)/100 : null;
+    var lcls = diff == null ? "good" : diff >= 0 ? "good" : "warn";
+    var lnote = diff == null ? "" : diff >= 0 ? diff.toFixed(2)+"d faster than all teams" : (-diff).toFixed(2)+"d slower than all teams";
+    top += '<div class="meter"><div class="meter-head"><span class="meter-lbl">LPP Time to Solution · P75</span><span class="meter-note '+lcls+'">'+lnote+'</span></div>'+
+      '<div class="mtrack"><div class="mfill '+lcls+'" style="width:'+Math.round(h/scale*100)+'%"></div>'+
+      (co != null ? '<i class="mgoal" style="left:'+Math.max(1,Math.min(99,Math.round(co/scale*100)))+'%" title="All Product Teams '+co+'d"></i>' : '')+'</div>'+
+      '<div class="meter-foot"><span>Headless '+h.toFixed(2)+'d'+(co != null ? ' · All Product Teams '+co.toFixed(2)+'d' : '')+'</span><span>'+(L.since ? 'updated '+esc(L.since) : '')+'</span></div></div>';
+  }
   $("metrics").innerHTML = top;
+  var nCards = $("metrics").children.length;
+  if (nCards === 3) $("metrics").classList.add("three");
+  if (nCards >= 4) $("metrics").classList.add("four");
 
   // ── Tabs ────────────────────────────────────────────────
+  // v0.18.0: every tab has a short code (data-k: 1a 1b 1c 2a 2b 3 4). "?tab=2a" (or "#2a") opens that tab;
+  // "Copy link" copies <web app URL>?tab=<code>. The web app URL is the "open full width" link in the header.
   var tabs = document.querySelectorAll(".tab");
-  tabs.forEach(function(t){ t.onclick = function(){
+  var hasGs = !!(window.google && google.script);
+  function showTab(t, fromUser){
+    if (!t) return;
     tabs.forEach(function(x){ x.classList.toggle("on", x===t); });
     document.querySelectorAll(".panel").forEach(function(p){ p.hidden = p.id !== t.dataset.p; });
-  };});
+    if (fromUser && hasGs && google.script.history) {   // full-width view: keep the address bar in step
+      try { google.script.history.replace(null, {tab: t.dataset.k}, ""); } catch (e) {}
+    }
+  }
+  function tabByCode(k){
+    k = String(k||"").toLowerCase().replace(/^#/, "").replace(/^tab=/, "");
+    if (k === "1h") k = "1c";
+    for (var i=0;i<tabs.length;i++) if (tabs[i].dataset.k === k) return tabs[i];
+    return null;
+  }
+  tabs.forEach(function(t){ t.onclick = function(){ showTab(t, true); }; });
+  if (hasGs && google.script.url) {
+    google.script.url.getLocation(function(loc){
+      var p = (loc && loc.parameter) || {};
+      showTab(tabByCode(p.tab || (loc && loc.hash)), false);
+    });
+  } else {
+    var m = /[?&]tab=([^&#]+)/.exec(location.search);
+    showTab(tabByCode(m ? decodeURIComponent(m[1]) : location.hash), false);
+  }
+  var linkBtn = $("copyTabLink"), linkMsg = $("copyTabMsg");
+  var baseEl = document.querySelector(".bar a.key");
+  var BASE = baseEl ? baseEl.href.split(/[?#]/)[0] : "";
+  if (linkBtn) linkBtn.onclick = function(){
+    var on = document.querySelector(".tab.on");
+    var url = BASE + "?tab=" + ((on && on.dataset.k) || "1a");
+    function done(ok){
+      linkMsg.textContent = ok ? "Link copied: " + url : "Copy this link: " + url;
+      clearTimeout(linkBtn._t); linkBtn._t = setTimeout(function(){ linkMsg.textContent = ""; }, ok ? 4000 : 20000);
+    }
+    function fallback(){
+      var ta = document.createElement("textarea"); ta.value = url; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta); done(ok);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function(){ done(true); }, fallback);
+    else fallback();
+  };
 
   // ── Rows ────────────────────────────────────────────────
   function labelCls(tier){
@@ -105,11 +180,12 @@
   function opts(ph, mode){ return '<option value="">'+ph+'</option>'+team.filter(function(m){ return mode !== "review" || ((roster[m]||{}).gh); }).map(function(m){return '<option>'+esc(m)+'</option>';}).join(""); }
   // Assign: works only inside the Apps Script web app (google.script.run) and when the roster is known.
   var live = !!(window.google && google.script && google.script.run) && Object.keys(roster).length > 0;
-  // mode "issue": Jira assignee (+ PR assignee on linked PRs) · mode "review": request GitHub review on the PR row
+  // mode "issue": Jira assignee (+ PR assignee on linked PRs) · mode "review": request GitHub review AND add the
+  // person as PR assignee (v0.19.0 — the assignee part is done by ReviewAssign.gs, called from Code.gs)
   function assignUI(td, tr, r, mode){
     var ph = mode === "review" ? "— reviewer —" : "— assign —";
     function build(){
-      td.innerHTML = '<div class="as"><select class="picker sm"'+(live?'':' disabled title="Assigning works on the Google Sites page"')+'>'+opts(ph, mode)+'</select><button class="act-btn" disabled>'+(mode==="review"?"Request review":"Assign")+'</button></div>';
+      td.innerHTML = '<div class="as"><select class="picker sm"'+(live?'':' disabled title="Assigning works on the Google Sites page"')+'>'+opts(ph, mode)+'</select><button class="act-btn" disabled>'+(mode==="review"?"Review + assign":"Assign")+'</button></div>';
       var sel = td.querySelector("select"), btn = td.querySelector("button");
       sel.onchange = function(){ btn.disabled = !sel.value; };
       btn.onclick = function(){
@@ -184,36 +260,51 @@
     var f = [];
     if (e.status==="Development Complete") f.push(["Dev complete — close epic","r"]);
     if (e.days>65) f.push(["Over 65d epic cycle time","r"]);
+    if (e.m_notsliced) f.push(["Not sliced yet — counts 0%","r"]);
+    else if (e.m_exp!=null && e.m_exp>e.m_created) f.push([(e.m_exp-e.m_created)+" expected slice"+(e.m_exp-e.m_created>1?"s":"")+" not in Jira yet","o"]);
     if (!e.total) f.push(["No stories — slice it","o"]);
     if (e.stale100) f.push([e.stale100+" stories untouched 100d+","o"]);
-    if (e.slow14) f.push([e.slow14+" stories over 14d","o"]);
-    if (e.cat==="indeterminate" && e.total && !e.inProgress && e.done<e.total) f.push(["Nothing in progress","o"]);
+    if (e.slow14) f.push([e.slow14+(e.slow14>1?" stories":" story")+" over 14d","o"]);
+    var ipN = e.m_ip!=null ? e.m_ip : e.inProgress;
+    if (e.cat==="indeterminate" && e.total && !ipN && e.done<e.total) f.push(["Nothing in progress","o"]);
     if (e.total && e.done===e.total) f.push(["All stories done — close?","o"]);
     if (!e.committed) f.push(["Counts in WIP, not committed","g"]);
     if (!e.fixVersions.length) f.push(["No Fix Version","o"]);
     return f.map(function(x){ return '<span class="flag f-'+x[1]+'">'+esc(x[0])+'</span>'; }).join("");
   }
   function epicTable(list, mountId){
+    var hasProb = !!F && list.some(function(e){ return e.m_prob!=null; });
     if (!list.length) { $(mountId).innerHTML = '<p class="sec-sub">No epics.</p>'; return; }
     var rows = list.map(function(e){
-      var pct = e.total ? Math.round(e.done/e.total*100) : 0, d = Math.round(e.days||0);
-      return '<tr><td><div class="ik"><span class="type t-epic">Epic</span><a class="key" href="'+J+e.key+'" target="_blank" rel="noopener">'+e.key+'</a></div><div class="sum">'+esc(e.summary)+'</div></td>'+
+      var M = e.m_exp!=null, pct = M ? Math.round(e.m_pct*100) : (e.total ? Math.round(e.done/e.total*100) : 0), d = Math.round(e.days||0);
+      var foot = M ? e.m_done+'/'+e.m_exp+' done · '+e.m_ip+' in progress'+(e.m_exp>e.m_created?' · '+(e.m_exp-e.m_created)+' not created':'')
+                   : (e.total!=null?(e.done||0)+'/'+e.total+' done · '+(e.inProgress||0)+' in progress':'—');
+      var prob = e.m_prob!=null ? Math.round(e.m_prob*100) : null;
+      var probCell = prob==null ? '<span class="faint">—</span>' : '<span class="flag f-'+(prob>=70?'g':prob>=40?'o':'r')+'">'+prob+'%</span>';
+      var pcls = {critical:"r", blocker:"r", high:"o", medium:"g", low:"g"}[(e.priority||"").toLowerCase()] || "g";
+      var prioCell = '<td>'+(e.priority?'<span class="flag f-'+pcls+'">'+esc(e.priority)+'</span>':'<span class="faint">No priority</span>')+
+        '<div class="kind">RICE '+(e.rice!=null?esc(String(e.rice)):'—')+'</div>'+
+        '<div class="kind" title="Position in Jira Rank order among the epics on this board (1 = top of the backlog)">Rank #'+(e.rankPos||'—')+'</div></td>';
+      return '<tr>'+prioCell+'<td><div class="ik"><span class="type t-epic">Epic</span><a class="key" href="'+J+e.key+'" target="_blank" rel="noopener">'+e.key+'</a></div><div class="sum">'+esc(e.summary)+'</div></td>'+
         '<td>'+statusChip(e.key, e.status, e.cat)+'</td><td>'+(e.size?'<span class="size">'+esc(e.size)+'</span><div class="kind">'+(e.pm!=null?e.pm+' person-month'+(e.pm==1?'':'s'):'')+'</div>':'<span class="flag f-o">No size</span>')+'</td><td class="fv">'+esc(e.fixVersions.join(", ")||"—")+'</td>'+
         '<td>'+(d?daysCell(d+"d in progress",true):'<span class="faint">not started</span>')+'</td>'+
-        '<td><div class="mtrack"><div class="mfill '+(pct>=70?"good":"")+'" style="width:'+pct+'%"></div></div><div class="eprog-foot"><span>'+(e.total!=null?(e.done||0)+'/'+e.total+' done · '+(e.inProgress||0)+' in progress':'—')+'</span><span>'+pct+'%</span></div></td>'+
-        '<td>'+flags(e)+'</td></tr>';
+        '<td><div class="mtrack"><div class="mfill '+(pct>=70?"good":"")+'" style="width:'+pct+'%"></div></div><div class="eprog-foot"><span>'+foot+'</span><span>'+pct+'%</span></div></td>'+
+        (hasProb ? '<td>'+probCell+'</td>' : '')+'<td>'+flags(e)+'</td></tr>';
     }).join("");
-    $(mountId).innerHTML = '<table class="rt et"><colgroup><col style="width:25%"><col style="width:9%"><col style="width:8%"><col style="width:14%"><col style="width:10%"><col style="width:16%"><col style="width:18%"></colgroup>'+
-      '<thead><tr><th>Epic</th><th>Status</th><th>Size</th><th>Fix Version</th><th>Cycle time</th><th>Stories</th><th>Flags</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    $(mountId).innerHTML = hasProb
+      ? '<table class="rt et"><colgroup><col style="width:8%"><col style="width:19%"><col style="width:9%"><col style="width:6%"><col style="width:10%"><col style="width:8%"><col style="width:19%"><col style="width:7%"><col style="width:14%"></colgroup>'+
+        '<thead><tr><th title="Sorted by Priority, then RICE (highest first), then Jira Rank">Prio</th><th>Epic</th><th>Status</th><th>Size</th><th>Fix Version</th><th>Cycle time</th><th>Stories + Tasks</th><th title="Monte Carlo chance that every expected item is done by the deadline">By '+esc(dshort(F.deadline))+'</th><th>Flags</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      : '<table class="rt et"><colgroup><col style="width:8%"><col style="width:23%"><col style="width:9%"><col style="width:7%"><col style="width:12%"><col style="width:9%"><col style="width:15%"><col style="width:17%"></colgroup>'+
+      '<thead><tr><th title="Sorted by Priority, then RICE (highest first), then Jira Rank">Prio</th><th>Epic</th><th>Status</th><th>Size</th><th>Fix Version</th><th>Cycle time</th><th>Stories</th><th>Flags</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
-  var byDays = function(a,b){ return (b.days||0)-(a.days||0); };
-  var com = committed.slice().sort(byDays);
-  var notCom = D.epics.filter(function(e){ return !e.committed && !e.discovery && e.cat==="indeterminate"; }).sort(byDays);
+  // v0.20.1: D.epics arrive sorted by Priority, RICE (highest first), then Jira Rank (board.py epic_priority_key) — keep that order.
+  var com = committed.slice();
+  var notCom = D.epics.filter(function(e){ return !e.committed && !e.discovery && e.cat==="indeterminate"; });
   var wipN = D.epics.filter(function(e){ return e.cat==="indeterminate"; }).length;
   epicTable(com,"tCom"); epicTable(notCom,"tNot");
   $("cCom").textContent = com.length; $("cNot").textContent = notCom.length;
   $("msName").textContent = ms ? ms.label : "";
-  $("wipNote").innerHTML = 'Headless epics only (Team field). Epic WIP: <b>'+wipN+'</b> in progress (goal ≤ 18). Sorted by cycle time, longest first.';
+  $("wipNote").innerHTML = 'Headless epics only (Team field). Epic WIP: <b>'+wipN+'</b> in progress (goal ≤ 18). Sorted by priority (Critical, High, Medium, Low), then RICE score (highest first), then Jira rank.';
 
   $("exclCount").textContent = D.excl.length;
   $("exclBody").innerHTML = D.excl.map(function(x){ return '<tr><td><a class="key" href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.key)+'</a></td><td>'+esc(x.why)+'</td></tr>'; }).join("");
