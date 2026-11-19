@@ -14,13 +14,15 @@
     <div class="metrics two" id="metrics"></div>
 
     <nav class="tabs">
-      <button class="tab on" data-p="p1a">1a · Needs Attention <span class="tc" data-c="s1a"></span></button>
-      <button class="tab" data-p="p1b">1b · Not in Iteration <span class="tc" data-c="s1b"></span></button>
-      <button class="tab" data-p="p1h">1c · High Cycle Time <span class="tc" data-c="s1h"></span></button>
-      <button class="tab" data-p="p2a">2a · Pick Up Next · Needs Owner <span class="tc" data-c="s2a"></span></button>
-      <button class="tab" data-p="p2b">2b · Pick Up Next · Assigned <span class="tc" data-c="s2b"></span></button>
-      <button class="tab" data-p="pms">3 · Milestone status</button>
-      <button class="tab" data-p="pt">4 · Tests</button>
+      <button class="tab on" data-p="p1a" data-k="1a">1a · Needs Attention <span class="tc" data-c="s1a"></span></button>
+      <button class="tab" data-p="p1b" data-k="1b">1b · Not in Iteration <span class="tc" data-c="s1b"></span></button>
+      <button class="tab" data-p="p1h" data-k="1c">1c · High Cycle Time <span class="tc" data-c="s1h"></span></button>
+      <button class="tab" data-p="p2a" data-k="2a">2a · Pick Up Next · Needs Owner <span class="tc" data-c="s2a"></span></button>
+      <button class="tab" data-p="p2b" data-k="2b">2b · Pick Up Next · Assigned <span class="tc" data-c="s2b"></span></button>
+      <button class="tab" data-p="pms" data-k="3">3 · Milestone status</button>
+      <button class="tab" data-p="pt" data-k="4">4 · Tests</button>
+      <button type="button" class="tab-link" id="copyTabLink" title="Copy a direct link to the open tab">🔗 Copy link</button>
+      <span class="tab-link-msg" id="copyTabMsg" role="status" aria-live="polite"></span>
     </nav>
 
     <div class="panel" id="p1a"><p class="sec-sub">In progress: all unplanned work, plus planned work with a PR that needs something (review, reviewer, merge, changes).</p><div id="t1a"></div></div>
@@ -31,6 +33,7 @@
 
     <div class="panel" id="pms" hidden>
       <div class="metrics" id="avd"></div>
+      <div class="fcast-wrap" id="fcast" hidden></div>
       <p class="sec-sub" id="wipNote"></p>
       <h3 class="sub-h">1. Milestone commitment <span class="count" id="cCom"></span><span class="hint2">Fix Version = <span id="msName"></span></span></h3>
       <div id="tCom"></div>

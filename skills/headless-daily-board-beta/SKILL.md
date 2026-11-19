@@ -3,7 +3,7 @@ name: "headless-daily-board-beta"
 description: "BETA of the Headless Daily Actions Report with a new output: a tabbed board (progress bars, numbered tabs 1a/1b/1c/2a/2b, milestone status, tests) instead of the Confluence report page. Runs on its own (same data collection and same shared context page as the daily actions report). Use only when the user asks for the board beta / headless-daily-board-beta."
 ---
 
-# Headless Daily Board — BETA (v0.17.4-beta)
+# Headless Daily Board — BETA (v0.20.2-beta)
 
 > **What this skill is:** the full Headless Daily Actions Report pipeline — data collection, files, the shared
 > context page (run memory: Sprint Metadata, rosters, Changelog Cache, State Snapshot, PR Snapshot, Slack Thread
@@ -26,10 +26,42 @@ description: "BETA of the Headless Daily Actions Report with a new output: a tab
 >   jira_data.json — no extra calls. A blocker added to Jira after the morning fetch only shows on the next run
 >   (or re-fetch that one issue and put it first in `--sprint-file`).
 > - **Live status (v0.17.0):** on the Google Site the board refreshes Jira statuses and PR states when it opens, via `liveStatus()` in `Live.gs` (ships with this skill; installed once in the Apps Script project next to Code.gs). Nothing to do per run.
+> - **Direct tab links (v0.18.0):** `?tab=1a|1b|1c|2a|2b|3|4` on the web app URL opens that tab; the board's
+>   "🔗 Copy link" button copies the link for the open tab. Built into `board_app.js` — nothing to do per run.
 > - **Oldest first inside each priority (v0.17.4):** inside the same priority tier, rows that have been in our queue
 >   longest come first (most days first) — 1a/1c, 2a Needs Owner and 2b Assigned alike (e.g. SEV tickets 6d → 3d → 1d).
 >   LPP rows in Pick Up Next still sort by heat score first, then oldest first. Built into `headless_daily_report.py`
 >   (`_sort_section1`, `_sort_section2`) — nothing to do per run.
+> - **LPP Time to Solution card (v0.19.0):** a third card in the top row, next to Iteration and Milestone, shows the
+>   Headless LPP Time to Solution (75th percentile, days) as the bar and the all-product-teams value as the tick, with
+>   "N.NNd faster / slower than all teams". Numbers are stored like the AVD numbers (`## LPP Time to Solution` on the
+>   shared context page) and asked for every run together with the AVD question (Step 1c).
+> - **Owned cross-team PRs go to Assigned (v0.19.0):** a PR from outside the team that already has a Headless reviewer or a
+>   non-author assignee is shown in 2b Assigned (still flagged "⚠️ Cross-team review request"); without an owner it stays
+>   pinned to the top of 2a Needs Owner. Built into `headless_daily_report.py`.
+> - **Manual corrections (v0.19.0):** when Nóra asks to move, add or drop a row on today's board, use the `HDB_OVERRIDES`
+>   hook instead of editing HTML — see Step 4. Corrections apply to one run only; say so when you apply them.
+> - **"Review + assign" on PR rows (v0.19.0):** the 2a Needs Owner PR-row button requests the review and adds the
+>   person as GitHub PR assignee. Needs `ReviewAssign.gs` (ships with this skill) installed once in the Apps Script
+>   project plus one line in Code.gs — instructions in the file header. Nothing to do per run.
+> - **Milestone model + Monte Carlo forecast (v0.20.0, per Nóra 2026-11-06):** the Milestone bar now counts Stories and
+>   Tasks (not Bugs) under the committed epics, expects max(created items, Claude's PO slice count from the epic ACs),
+>   gives partial credit to items in progress, and counts an epic still before Ready for Development as 0%. The
+>   deadline is **23 Dec 2026** (`MILESTONE["end"]` in board.py), not the 1 Jan Fix Version date. A Monte Carlo
+>   forecast (5,000 runs on the team's real Story/Task cycle times) is shown **only on tab 3 · Milestone status**, with a
+>   "By <deadline>" chance per epic. Inputs and the review cadence: Step 1c, items 1b and 4.
+> - **Milestone tab in priority order (v0.20.1, per Nóra 2026-11-11):** both epic lists on tab 3 are sorted by Priority
+>   (Critical → High → Medium → Low), then RICE score (`customfield_10904`, highest first), then Jira Rank
+>   (`customfield_10019`, top of the backlog first); missing values go last. A first **Prio** column shows the Priority
+>   badge, the RICE score and "Rank #n" (the epic's position in Jira Rank order among the epics on the board, 1 = top). Call A of `board.py --plan` now asks for `priority`, `customfield_10904`, `customfield_10019`; write them to
+>   epics.json as `"priority"` (name), `"rice"` (number or null), `"rank"` (string). Sorting is in `epic_priority_key()`.
+> - **Fixes in v0.19.0:** the BPR "Original Fix  Committed" status (two spaces in Jira) is recognised when the
+>   "since committed" days are computed; `--confirm-publish` no longer adds a second `latest_skill_version` line.
+> - **Other team's work by a shared person (v0.20.2, per Nóra 2026-11-13):** an LPD whose Team field names a
+  non-Headless team AND whose sprint is not an `HL…` sprint is excluded as "Other team's LPD", even when the assignee
+  is on the Account IDs roster (e.g. David Aragonés's Platform Experience tasks). Rule 5a in `should_exclude()`.
+  Also: right after Step 0 sync-in, strip the blank line Confluence adds after each `## Section` heading before
+  running `assemble_slack_data.py` (otherwise it reads an empty Team Slack Names roster).
 > Everything else (Step 0 context sync, Step 1 collection, 1a/1b, guardrails, budget checkpoints) applies as written.
 
 
@@ -614,7 +646,35 @@ All configuration, the exact calls and the layout rules live in `board.py` (see 
 changelogs here; no subagent needed (~5 + 3×epics small calls). Budget checkpoint before starting.
 
 1. `python3 board.py --plan` → run calls A–C in parallel; then `python3 board.py --plan --epic-keys <keys from A>`
-   → run D–E in parallel. If `--plan` reports more than 25 epics, stop and ask.
+   → run D–F in parallel. If `--plan` reports more than 25 epics, stop and ask.
+   **F (v0.20.0)** = Stories and Tasks under the **committed** epics (Fix Version = milestone) — goes into epics.json
+   `"children"`. Epic `updated` (call A) goes into each epic. One search, 1–2 pages; never expand changelogs.
+1b. **Milestone model inputs (v0.20.0) — they live on the shared context page, not in a per-run file:**
+   - `## Milestone Slices` `{"LPD-1": {"slices": 5, "reviewed": "YYYY-MM-DD", "status": "<epic status at review>", "note": "…"}}`
+     — Claude's own PO slice count per committed epic, read from the epic's ACs (Nóra decided: Claude owns these, the
+     PO is not asked). `slices: 0` = no ACs to slice → created items count. Expected items = max(created, slices).
+   - `## Cycle Time Sample` `{"refreshed", "from", "to", "items", "cycleTimes": [days…]}` — every Headless Story and Task
+     resolved as Completed in the last 120 days; cycle time = first move into an in-progress status → resolution date
+     (calendar days). board.py drops values over 180d as dormant outliers.
+   - WIP for the simulation = the AVD WIP number (avd.json). Deadline = `MILESTONE["end"]`.
+   - `--confirm-publish` passes these sections through unchanged; edit them in `WORK_DIR/context_scratch.md` before Step 2.
+   **Review cadence (agreed with Nóra 2026-11-06):**
+   - **Every run (automatic):** item list (call F), Milestone bar, partial credit, Monte Carlo and per-epic chances —
+     all computed by `board.py --build`, nothing to do by hand.
+   - **Slice counts — only on a trigger.** `--build` prints `⚑ SLICE REVIEW …` when a committed epic has no slice count,
+     its `updated` date is after `reviewed`, or it moved out of Open/refinement since the review. Then read that epic's
+     description (`getJiraIssue`, fields summary/status/description, markdown), slice the ACs like a Product Owner
+     (one slice = one user-visible capability, usually one AC group; tiny UI details fold into their neighbour), update
+     the section with today's `reviewed` and `status`, rebuild, and tell Nóra in the run summary what changed
+     ("Managing Launches: 12 → 14 slices — ACs for bulk delete added"). If the team created more items than the slice
+     count, no review is needed (max() already uses the bigger number).
+   - **Cycle-time sample — every 2 weeks, at the start of each iteration.** `--build` prints `⚑ CYCLE TIME REFRESH` when
+     the sample is older than 14 days or older than the current iteration's start. Then: JQL
+     `"Team[Team]" = 81233281-c987-401d-8d68-85d8ad1ec2fc AND issuetype in (Story, Task) AND resolution = Completed AND resolved >= -120d`
+     (fields resolutiondate), fetch each item's changelog with small Haiku subagents (~10 keys each, they only make the
+     `getJiraIssue(expand=changelog, fields=[status,created,resolutiondate])` calls; parse their transcripts and the
+     oversize tool-result files), compute the cycle times and replace the section (`refreshed` = today). Mention the new
+     median / 85% in the run summary. Never do this on other days.
 2. Write `WORK_DIR/epics.json` exactly in the format `--plan` prints, and the Testray page body to
    `WORK_DIR/testray.html`.
    **AVD metrics (section 3) — stored, never "?" (2026-10-16, per Nóra).** The four AVD numbers live in the
@@ -632,6 +692,15 @@ changelogs here; no subagent needed (~5 + 3×epics small calls). Budget checkpoi
      Only if the section is missing or empty, leave the tiles as "?" and tell Nóra.
    - The `## AVD Metrics` section is saved back to the shared page with the rest of the run memory in Step 2 —
      `--confirm-publish` passes unknown sections through unchanged, so edit it in `WORK_DIR/context_scratch.md` before that step.
+   **LPP Time to Solution (top-row card) — stored, asked with the AVD question (2026-11-03, per Nóra).** Two numbers in
+   days, 75th percentile: Headless (the headline) and all product teams (comparison only). They live in the
+   `## LPP Time to Solution` section of the shared context page, e.g. `{"headless": 6.8, "company": 8.41, "since": "2026-11-03"}`.
+   - **Ask in the same AskUserQuestion as the AVD numbers** (a second question in the same call): show the stored values
+     and their date; options "No change — keep these" / "Yes — I'll paste the new numbers". Unattended: keep them and
+     put the question in the run summary.
+   - New numbers: update the section and set `since` to today. Never look the numbers up yourself.
+   - **Write `WORK_DIR/lpp.json` on every run** with exactly the stored object — `board.py --build` picks it up and
+     draws the card. Missing file = no card (the top row stays at two cards); if the section is missing, tell Nóra.
 3. `python3 board.py --build --work-dir WORK_DIR --report-html <the daily_actions_report_<date>.html written in Step 1> --jira-data-file WORK_DIR/jira_data.json`
    (`WORK_DIR/context_scratch.md` is picked up automatically: its Account IDs + Team GitHub Logins feed the Assign
    buttons, which only work on the Google Site — the Apps Script there updates Jira and GitHub.)
@@ -677,3 +746,17 @@ If the device is not reachable or the folder is not connected, say so and ask N�
 
 The memory is already saved (Step 2), the site is only updated after approval (Step 3). If the data was wrong (e.g. a fetch failed), fix the cause and rerun the skill —
 the rerun overwrites the memory with corrected data. Never hand-edit the board HTML.
+
+**Manual corrections from Nóra (v0.19.0).** If the change comes from Jira (someone was assigned, an issue was closed or
+moved to another team), re-fetch those issues, update them in `WORK_DIR/jira_data.json` and rebuild — the fix is then
+real data. If it is a judgement call ("put PTR-X in Needs Owner", "also show PR#N as its own row"), write
+`WORK_DIR/overrides.json` and rebuild with `HDB_OVERRIDES=WORK_DIR/overrides.json`:
+`{"exclude": {"KEY": "reason"}, "force_section": {"KEY": "2b"}, "notes": {"KEY": "=Assign & start — per Nóra"}, "extra_standalone_prs": {"4534": "2b"}}`.
+⚠️ The override file uses the report script's internal codes, which are the reverse of the board tabs:
+**"2b" = board 2a · Needs Owner, "2a" = board 2b · Assigned.** A note starting with "=" replaces the action text.
+An issue that is not in the iteration filter (created after the morning fetch) is added by fetching it with the sprint
+field list and inserting it into `sprint_issues` in jira_data.json.
+For a same-day rebuild, run the report against a copy of the context file taken **before** `--confirm-publish`
+(otherwise rows whose trigger was "status changed since the snapshot" drop out of 1a), then rebuild the board, send
+it, and publish only after Nóra says so. Overrides are not stored — tomorrow's board is built from Jira again; tell
+Nóra which corrections will not carry over.

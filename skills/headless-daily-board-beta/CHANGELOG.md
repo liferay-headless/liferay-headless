@@ -1,5 +1,24 @@
 # Changelog — headless-daily-board-beta
 
+## 0.20.0-beta (2026-11-06)
+- Milestone bar, new model (per Nóra): Stories + Tasks under the committed epics (Bugs no longer count); expected items per epic = max(created, Claude's PO slice count from the ACs, stored on the shared context page `## Milestone Slices`); epics still before Ready for Development count 0%; items in "Ready for Development"/refinement count as not started; partial credit for items in progress = age / (age + median remaining time of history items that reached that age), max 0.9; still weighted by T-shirt size.
+- Milestone deadline = 23 Dec 2026 (team's last working day), not the 1 Jan Fix Version date — `MILESTONE["end"]`.
+- Monte Carlo forecast (5,000 runs, fixed seed) on the team's Story/Task cycle times (`## Cycle Time Sample`, last 120 days, values over 180d dropped), WIP = AVD WIP: chance everything is done by the deadline, 50% and 85% finish dates, items done by the deadline. Shown only on tab 3 · Milestone status (per Nóra), plus a "By <deadline>" chance per epic and new flags ("Not sliced yet — counts 0%", "N expected slices not in Jira yet").
+- `--plan` adds call F (Stories + Tasks under the committed epics → epics.json "children") and the epic `updated` field. `--build` prints ⚑ SLICE REVIEW / ⚑ CYCLE TIME REFRESH triggers (cadence in SKILL.md Step 1c item 1b).
+- Slow-story flags ignore items in "Ready for Development" (Jira puts them in the In Progress category).
+- Slack rows in slack_data.json may carry their own `action_text` / `days_cell` (used 2026-11-06 to pin a #maintenance-release-status release test failure to the top of 2a Needs Owner). Without them the old text is used.
+
+## 0.19.0-beta (2026-11-03)
+- LPP Time to Solution card (per Nóra): third card in the top row, same style as Iteration and Milestone. Bar = Headless P75 in days (the headline), dark tick = all product teams (comparison); note "N.NNd faster than all teams" in green, or "…slower" in amber. Data from WORK_DIR/lpp.json, stored on the shared context page (`## LPP Time to Solution`) and asked for every run with the AVD question. Three cards stack on narrow screens.
+- Owned cross-team PRs → 2b Assigned (a reviewer or a non-author assignee counts as owner); unowned ones stay pinned to the top of 2a Needs Owner. Was a run-local change since 2026-10-26.
+- BPR "Original Fix  Committed" (two spaces in Jira) is matched when the days since commit are computed (`_get_bpr_ofc_date`). Was a run-local change.
+- `HDB_OVERRIDES` hook in `headless_daily_report.py` for Nóra's one-run corrections (exclude / force_section / notes / extra_standalone_prs) — documented in SKILL.md Step 4; a forced row is moved once.
+- "Review + assign" on PR rows in 2a Needs Owner (team request via Nóra): the button requests the GitHub review AND adds the person as PR assignee, because the team finds its PRs by assignee on GitHub. The assignee part is new Apps Script code: `ReviewAssign.gs` (new file next to Code.gs) + one line in Code.gs `assign()` — see the file header. Existing assignees are kept. Until the script is updated the button still only requests the review.
+- `--confirm-publish` updates `latest_skill_version` in place instead of adding a second "- latest_skill_version" line.
+
+## 0.18.0-beta (2026-10-30)
+- Direct links to tabs (per Nóra): every tab has a short code (1a, 1b, 1c, 2a, 2b, 3, 4). Opening the board with `?tab=2a` (or `#2a`) shows that tab first. A "🔗 Copy link" button next to the tabs copies `<web app URL>?tab=<open tab>` — the web app URL is taken from the "open full width" link in the header, so it changes in one place (board_body.html). When the board is opened full width, clicking a tab also updates the address bar. Google Sites keeps showing `.../home` (an embedded page can't change the Site address), so share the copied link, not the Site address. No Code.gs change needed.
+
 ## 0.17.4-beta (2026-10-21)
 - Oldest first inside each priority (per Nóra): `_sort_section1` and `_sort_section2` in `headless_daily_report.py` now sort rows of the same tier by days descending — the ticket that has been in our queue longest comes first. Before, planned rows in Section 1 and all non-LPP rows in Pick Up Next were youngest-first (e.g. 2a SEV tickets showed 1d, 2d, 3d, 6d). LPP rows in Pick Up Next keep heat score as the first key, then oldest first. 1b, 1c and PR rows were already longest-first.
 

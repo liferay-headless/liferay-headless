@@ -24,6 +24,11 @@ What the board shows
   orange > 7d; epics red > 65d, orange > 45d), PRs & review and Other updates in separate columns.
   Milestone status: Headless epics only, Size column, (1) committed = milestone Fix Version, (2) active but
   not committed (discovery excluded), each sorted by cycle time desc, with flags.
+  v0.20.0 milestone model: Stories+Tasks under committed epics (epics.json "children"), expected = max(created,
+  "## Milestone Slices"), partial credit, epics before Ready for Development = 0%, deadline MILESTONE["end"];
+  Monte Carlo forecast from "## Cycle Time Sample" (context page) shown on tab 3 only — see forecast().
+  LPP card (top row, 3rd): WORK_DIR/lpp.json {"headless": 6.8, "company": 8.41, "since": "YYYY-MM-DD"} — Headless
+  LPP Time to Solution P75 (days) as the bar, all product teams as the tick; no file = no card.
   AVD tiles (goals 15d / 65d / 24d / WIP 18) show "?" until an avd.json is supplied:
   {"story":{"value":57,"basis":"85th pct · 8 iterations","outliers":[{"key":"LPD-1","days":40}]},
    "epic":{...}, "handoff":{...}, "wip":{"value":13}}
@@ -32,16 +37,26 @@ import argparse, html, json, re, sys
 from datetime import date
 from pathlib import Path
 
-BOARD_VERSION = "0.17.4-beta"
+BOARD_VERSION = "0.20.2-beta"
 HERE = Path(__file__).parent
 
 # ── Configuration (edit here, not in SKILL.md) ─────────────────────────────
 CLOUD_ID = "liferay.atlassian.net"
 TEAM_CLAUSE = '"Team[Team]" = 81233281-c987-401d-8d68-85d8ad1ec2fc'
-MILESTONE = {"name": "2026 M4 Delivery Milestone", "start": "2026-10-05", "end": "2027-01-01"}  # update each milestone
+# end = the team's real deadline for the milestone (v0.20.0: 23 Dec, last working day of the year — not the
+# Fix Version release date 1 Jan). The schedule line and the Monte Carlo forecast both use it. Update each milestone.
+MILESTONE = {"name": "2026 M4 Delivery Milestone", "start": "2026-10-05", "end": "2026-12-23"}
+# v0.20.0 milestone model (see forecast()):
+NOT_SLICED = {"open", "new request", "ready for refinement", "in refinement", "in design", "ready for research"}
+NOT_STARTED = NOT_SLICED | {"ready for development"}   # child items in these statuses have not started yet
+MC_RUNS, MC_SEED, CT_MAX = 5000, 42, 180   # cycle times over CT_MAX days are dormant outliers and are dropped
 ITERATION_FILTER = 54796
 TESTRAY_PAGE_ID = "5096669324"
 TSHIRT_FIELD = "customfield_10804"
+RICE_FIELD = "customfield_10904"   # v0.20.1: RICE score (number)
+RANK_FIELD = "customfield_10019"   # v0.20.1: Jira Rank (LexoRank string, smaller = higher)
+# v0.20.1 (per Nóra 2026-11-11): Milestone tab epics are sorted by Priority, then RICE (highest first), then Rank.
+PRIORITY_ORDER = {"blocker": 0, "critical": 1, "high": 2, "medium": 3, "low": 4, "lowest": 5}
 MAX_EPICS = 25            # token gate: stop and ask above this
 SEARCH_ROOTS = ["/root/.claude/skills", "/mnt/user-data", "/tmp/claude-0", str(Path.home()), "."]
 
@@ -208,6 +223,16 @@ def days_since(d, today):
     return max(0, (date.fromisoformat(today) - date.fromisoformat(d[:10])).days)
 
 
+def epic_priority_key(e):
+    """v0.20.1: Priority (Critical > High > Medium > Low), then RICE (highest first), then Jira Rank (LexoRank, ascending).
+    Missing values go last within their level."""
+    pr = PRIORITY_ORDER.get((e.get("priority") or "").lower(), 9)
+    rice = e.get("rice")
+    rice = -float(rice) if isinstance(rice, (int, float)) else float("inf")
+    rank = e.get("rank") or "\uffff"
+    return (pr, rice, rank)
+
+
 def build_epics(path, today):
     if not path or not Path(path).exists():
         return None, None, []
@@ -217,6 +242,8 @@ def build_epics(path, today):
     disc = name.replace("Delivery", "Discovery") if name else None
     slow = {}
     for s in E.get("slowStories", []):
+        if (s.get("status") or "").lower() in NOT_STARTED:
+            continue  # v0.20.0: "Ready for Development" is in Jira's In Progress category but has not started
         d = days_since(s.get("since"), today)
         b = slow.setdefault(s.get("epic"), {"slow14": 0, "stale100": 0})
         if d > 100:
@@ -228,15 +255,23 @@ def build_epics(path, today):
         fv = e.get("fixVersions") or []
         cat = e.get("statusCategory", "")
         epics.append({
-            "key": e["key"], "summary": e.get("summary", ""), "status": e.get("status", ""), "cat": cat,
+            "key": e["key"], "summary": e.get("summary", ""), "status": e.get("status", ""), "cat": cat, "updated": e.get("updated", ""),
             "size": e.get("size") or "", "pm": SIZE_PM.get((e.get("size") or "").upper()),
             "fixVersions": fv, "committed": name in fv, "discovery": bool(disc) and disc in fv and name not in fv,
             "days": days_since(e.get("inProgressSince"), today) if cat == "indeterminate" else 0,
             "total": e.get("total"), "done": e.get("done"), "inProgress": e.get("inProgress"),
+            "priority": e.get("priority") or "", "rice": e.get("rice"), "rank": e.get("rank") or "",
             **slow.get(e["key"], {"slow14": 0, "stale100": 0}),
         })
+    epics.sort(key=epic_priority_key)
+    # v0.20.1: readable rank — position of each epic in Jira Rank order among the epics on the board (1 = top of backlog)
+    for i, e in enumerate(sorted([e for e in epics if e["rank"]], key=lambda e: e["rank"]), 1):
+        e["rankPos"] = i
     it = E.get("iteration") or {}
     milestone = {"label": name, "start": ms.get("start"), "end": ms.get("end")} if name else None
+    milestone_children = E.get("children") or []
+    if milestone:
+        milestone["children"] = milestone_children
     return milestone, it, epics
 
 
@@ -257,6 +292,57 @@ def clean_testray(path):
 
 
 # ── 3. Render ──────────────────────────────────────────────────────────────
+def context_section(context_path, name):
+    """JSON body of a '## name' section of the context file ({} if missing)."""
+    if not context_path or not Path(context_path).exists():
+        return {}
+    m = re.search(r"## " + re.escape(name) + r"\s*\n+```json\n(.*?)```", Path(context_path).read_text(), re.S)
+    try:
+        return json.loads(m.group(1)) if m else {}
+    except Exception:
+        return {}
+
+
+def forecast_inputs(context_path, avd, wd):
+    """v0.20.0: forecast inputs. WORK_DIR/forecast.json wins (testing); otherwise built from the shared context page:
+    '## Milestone Slices' {epic: {"slices": n, "reviewed": "YYYY-MM-DD", "note": "..."}},
+    '## Cycle Time Sample' {"refreshed", "from", "to", "cycleTimes": [...]}, WIP = AVD WIP value (avd.json)."""
+    f = wd / "forecast.json"
+    if f.exists():
+        return json.loads(f.read_text()), {}, {}
+    sl = context_section(context_path, "Milestone Slices")
+    cs = context_section(context_path, "Cycle Time Sample")
+    if not cs.get("cycleTimes"):
+        return None, sl, cs
+    wip = ((avd or {}).get("wip") or {}).get("value") or 13
+    return ({"wip": wip, "slices": {k: v.get("slices", 0) if isinstance(v, dict) else v for k, v in sl.items()},
+             "cycleTimes": cs["cycleTimes"], "cycleTimesFrom": cs.get("from"), "cycleTimesTo": cs.get("to")}, sl, cs)
+
+
+def review_checks(epics, sl, cs, today, sprint_start):
+    """v0.20.0 triggers Claude acts on: slice reviews and the cycle-time sample refresh."""
+    out = []
+    for e in epics:
+        if not e["committed"]:
+            continue
+        s = sl.get(e["key"])
+        st = (e["status"] or "").lower()
+        if s is None:
+            if st not in NOT_SLICED:
+                out.append(f"SLICE REVIEW {e['key']} ({e['summary']}): no slice count yet — read the ACs and add it")
+            continue
+        rev = s.get("reviewed", "") if isinstance(s, dict) else ""
+        if e.get("updated") and rev and e["updated"][:10] > rev:
+            out.append(f"SLICE REVIEW {e['key']} ({e['summary']}): epic updated {e['updated'][:10]} after review {rev}")
+        if isinstance(s, dict) and s.get("status") and s["status"].lower() in NOT_SLICED and st not in NOT_SLICED:
+            out.append(f"SLICE REVIEW {e['key']} ({e['summary']}): moved to {e['status']} — slice it now")
+    if cs:
+        ref = cs.get("refreshed", "")
+        if not ref or (sprint_start and ref < sprint_start) or days_since(ref, today) > 14:
+            out.append(f"CYCLE TIME REFRESH: sample from {ref or 'never'} — refresh it (new iteration or older than 14 days)")
+    return out
+
+
 def load_roster(context_path):
     """{name: {"aid": Jira accountId, "gh": GitHub login}} from the context file's Account IDs + Team GitHub Logins."""
     if not context_path or not Path(context_path).exists():
@@ -283,10 +369,83 @@ def load_roster(context_path):
     return roster
 
 
+def forecast(epics, children, fc, today, deadline):
+    """v0.20.0 milestone model for committed epics.
+    Expected items per epic = max(Story+Task children, PO slice count from fc["slices"]).
+    Progress = (done + partial credit of in-progress items) / expected; an epic still before Ready for Development
+    counts 0%. Partial credit of an item open for a days = a / (a + median remaining time of history items that
+    reached a days), capped 0.9. Monte Carlo: fc["wip"] items in parallel, durations drawn from fc["cycleTimes"]."""
+    import random, statistics
+    from datetime import timedelta
+    ct = [c for c in fc.get("cycleTimes", []) if 0 < c <= CT_MAX]
+    if not ct:
+        return None
+    rem_cache = {}
+    def rem(age):
+        if age not in rem_cache:
+            r = [c - age for c in ct if c > age]
+            rem_cache[age] = r or [max(1, round(c * 0.25)) for c in ct]
+        return rem_cache[age]
+    def credit(age):
+        r = statistics.median(rem(age)); return min(age / (age + r), 0.9) if age + r else 0
+    slices = fc.get("slices", {})
+    by_epic = {}
+    for c in children or []:
+        by_epic.setdefault(c["epic"], []).append(c)
+    ip, ns, wtot, wdone = [], [], 0.0, 0.0
+    for e in epics:
+        if not e["committed"]:
+            continue
+        kids = by_epic.get(e["key"], [])
+        done = sum(1 for c in kids if c.get("statusCategory") == "done")
+        ages = [days_since(c.get("since"), today) for c in kids
+                if c.get("statusCategory") == "indeterminate" and (c.get("status") or "").lower() not in NOT_STARTED]
+        exp = max(len(kids), int(slices.get(e["key"], 0) or 0))
+        notsliced = (e["status"] or "").lower() in NOT_SLICED
+        cr = sum(credit(a) for a in ages)
+        pct = 0.0 if notsliced or not exp else min(1.0, (done + cr) / exp)
+        e.update({"m_exp": exp, "m_created": len(kids), "m_done": done, "m_ip": len(ages),
+                  "m_ns": max(0, exp - done - len(ages)), "m_pct": pct, "m_notsliced": notsliced,
+                  "m_slices": slices.get(e["key"])})
+        w = e["pm"] if e["pm"] is not None else 1
+        wtot += w; wdone += w * pct
+        ip += [(e["key"], a) for a in ages]; ns += [e["key"]] * e["m_ns"]
+    H = (date.fromisoformat(deadline) - date.fromisoformat(today)).days
+    W = max(int(fc.get("wip") or 13), len(ip))
+    rnd = random.Random(MC_SEED)
+    fin, by_dl, ep_ok = [], [], {e["key"]: 0 for e in epics if e["committed"]}
+    for _ in range(MC_RUNS):
+        slots, ep_end, n_ok = [], {}, 0
+        for k, a in ip:
+            d = rnd.choice(rem(a)); slots.append(d); ep_end[k] = max(ep_end.get(k, 0), d); n_ok += d <= H
+        slots += [0] * (W - len(slots))
+        q = ns[:]; rnd.shuffle(q)
+        for k in q:
+            i = min(range(len(slots)), key=slots.__getitem__)
+            slots[i] += rnd.choice(ct); ep_end[k] = max(ep_end.get(k, 0), slots[i]); n_ok += slots[i] <= H
+        fin.append(max(slots) if slots else 0); by_dl.append(n_ok)
+        for k in ep_ok:
+            ep_ok[k] += ep_end.get(k, 0) <= H
+    fin.sort(); by_dl.sort()
+    d = lambda x: str(date.fromisoformat(today) + timedelta(days=fin[int(x * MC_RUNS) - 1]))
+    for e in epics:
+        if e["key"] in ep_ok:
+            e["m_prob"] = ep_ok[e["key"]] / MC_RUNS
+    remaining = len(ip) + len(ns)
+    return {"done": wdone / wtot if wtot else 0, "wDone": wdone, "wTot": wtot, "deadline": deadline,
+            "p50": d(.5), "p85": d(.85), "probAll": sum(f <= H for f in fin) / MC_RUNS,
+            "itemsMedian": by_dl[MC_RUNS // 2], "items85": by_dl[int(.15 * MC_RUNS)], "remaining": remaining,
+            "expected": sum(e.get("m_exp", 0) for e in epics if e["committed"]),
+            "doneItems": sum(e.get("m_done", 0) for e in epics if e["committed"]),
+            "notCreated": sum(max(0, e.get("m_exp", 0) - e.get("m_created", 0)) for e in epics if e["committed"]),
+            "wip": W, "runs": MC_RUNS, "sample": len(ct), "ctMedian": statistics.median(ct),
+            "ctP85": statistics.quantiles(ct, n=20)[16], "sampleFrom": fc.get("cycleTimesFrom"), "sampleTo": fc.get("cycleTimesTo")}
+
+
 GH_PR_RE = re.compile(r'https://github\.com/[\w.-]+/[\w.-]+/pull/\d+')
 
 
-def render(rep, info, milestone, it, epics, testray_html, avd, roster=None, prs=None):
+def render(rep, info, milestone, it, epics, testray_html, avd, roster=None, prs=None, lpp=None):
     epic_by_name = {e["summary"].strip(): e["key"] for e in (epics or []) if e.get("summary")}
 
     def enrich(rows):
@@ -345,7 +504,7 @@ def render(rep, info, milestone, it, epics, testray_html, avd, roster=None, prs=
                      "total": (it or {}).get("total", 0), "done": (it or {}).get("done", 0)}
     D = {"meta": {"date": rep["date"], "sprint_label": rep["sprint_label"], "version": BOARD_VERSION},
          "iteration": iteration, "milestone": milestone, "sections": sections, "excl": rep["excl"],
-         "epics": epics or [], "avd": avd, "team": [n for n in TEAM if n in roster] if roster else TEAM, "roster": roster or {}}
+         "epics": epics or [], "avd": avd, "lpp": lpp, "team": [n for n in TEAM if n in roster] if roster else TEAM, "roster": roster or {}}
     body = (HERE / "board_body.html").read_text()
     body = (body.replace("__SPRINT__", html.escape(rep["sprint_label"]))
                 .replace("__REMAINING__", str(rep["days_remaining"]))
@@ -390,7 +549,7 @@ def plan(epic_keys):
     print(f"cloudId: {CLOUD_ID} · run independent calls in parallel · never expand changelog\n")
     print("A. Epics (searchJiraIssuesUsingJql, maxResults 50):")
     print(f"   jql: {q}")
-    print(f'   fields: ["summary","status","fixVersions","statuscategorychangedate","{TSHIRT_FIELD}"]')
+    print(f'   fields: ["summary","status","fixVersions","statuscategorychangedate","updated","{TSHIRT_FIELD}","priority","{RICE_FIELD}","{RANK_FIELD}"]')
     print(f"   → if more than {MAX_EPICS} epics: STOP and ask the user.\n")
     print('B. Iteration (searchResultMode "count"):')
     print(f"   jql: filter = {ITERATION_FILTER}")
@@ -403,16 +562,21 @@ def plan(epic_keys):
         print("\nE. Slow stories (searchJiraIssuesUsingJql):")
         print(f'   jql: parent in ({",".join(epic_keys)}) AND statusCategory = "In Progress" AND statusCategoryChangedDate <= -14d')
         print('   fields: ["status","statuscategorychangedate","parent"]\n')
+        print("F. Milestone items (v0.20.0) — Stories and Tasks under the COMMITTED epics only (Fix Version = milestone):")
+        print("   jql: parent in (<committed epic keys>) AND issuetype in (Story, Task)")
+        print('   fields: ["issuetype","status","parent","statuscategorychangedate"] · maxResults 100, page to the end')
+        print('   → epics.json "children": [{"key","epic","type","status","statusCategory","since"}] (since = statuscategorychangedate date)\n')
     else:
         print("D/E: re-run with --epic-keys K1,K2,... (keys from call A) to get the per-epic calls.\n")
     print("Then write WORK_DIR/epics.json (compact, no raw API objects):")
     print(json.dumps({"iteration": {"total": 0, "done": 0},
                       "epics": [{"key": "LPD-1", "summary": "…", "status": "In Development", "statusCategory": "indeterminate",
-                                 "fixVersions": ["…"], "size": "2XL", "inProgressSince": "YYYY-MM-DD",
-                                 "total": 0, "done": 0, "inProgress": 0}],
-                      "slowStories": [{"key": "LPD-2", "epic": "LPD-1", "status": "In Progress", "since": "YYYY-MM-DD"}]},
+                                 "fixVersions": ["…"], "size": "2XL", "inProgressSince": "YYYY-MM-DD", "updated": "YYYY-MM-DD",
+                                 "total": 0, "done": 0, "inProgress": 0, "priority": "High", "rice": 600, "rank": "1|i2c0fz:"}],
+                      "slowStories": [{"key": "LPD-2", "epic": "LPD-1", "status": "In Progress", "since": "YYYY-MM-DD"}],
+                      "children": [{"key": "LPD-3", "epic": "LPD-1", "type": "Story", "status": "In Progress", "statusCategory": "indeterminate", "since": "YYYY-MM-DD"}]},
                      ensure_ascii=False))
-    print("statusCategory = status category key (new/indeterminate); inProgressSince = statuscategorychangedate date; size = T-shirt value or \"\".")
+    print("statusCategory = status category key (new/indeterminate); inProgressSince = statuscategorychangedate date; size = T-shirt value or \"\"; priority = priority name, rice = RICE number or null, rank = Rank string.")
 
 
 def find_inputs(today, roots=None):
@@ -514,6 +678,12 @@ def self_test():
     rows = [dict(key="S", type="Spike", days="40d"), dict(key="T", type="Task", days="30d"),
             dict(key="A", type="Story", days="16d"), dict(key="B", type="Story", days="25d"), dict(key="G", type="Bug", days="9d")]
     assert [r["key"] for r in sort_1c(rows)] == ["B", "A", "T", "G", "S"]
+    # v0.20.1 epic priority order: Priority, then RICE desc, then Rank asc; missing values last
+    ep = [{"key": "LOW", "priority": "Low", "rice": 900, "rank": "1|a"}, {"key": "HI-R2", "priority": "High", "rice": 100, "rank": "1|a"},
+          {"key": "HI-NONE", "priority": "High", "rice": None, "rank": "1|a"}, {"key": "CRIT", "priority": "Critical", "rice": None, "rank": "1|z"},
+          {"key": "HI-R6b", "priority": "High", "rice": 600, "rank": "1|c"}, {"key": "HI-R6a", "priority": "High", "rice": 600, "rank": "1|b"},
+          {"key": "NOPRIO", "priority": "", "rice": 1000, "rank": "1|a"}, {"key": "MED", "priority": "Medium", "rice": 1, "rank": "1|a"}]
+    assert [e["key"] for e in sorted(ep, key=epic_priority_key)] == ["CRIT", "HI-R6a", "HI-R6b", "HI-R2", "HI-NONE", "MED", "LOW", "NOPRIO"]
     import tempfile, os
     d = tempfile.mkdtemp()
     ctx = os.path.join(d, "c.md"); jd = os.path.join(d, "j.json")
@@ -578,6 +748,26 @@ def main():
     info = summaries_from_jira_data(jira_data)
     milestone, it, epics = build_epics(epics_file, rep["date"])
     avd = json.loads(Path(avd_file).read_text()) if avd_file else None
+    # v0.20.0: milestone model — WORK_DIR/forecast.json {"wip": 13, "slices": {epic: n}, "cycleTimes": [days...],
+    # "cycleTimesFrom": "YYYY-MM-DD", "cycleTimesTo": "YYYY-MM-DD"} + epics.json "children" (Story/Task items)
+    ctx_file0 = a.context_file or (str(wd / "context_scratch.md") if (wd / "context_scratch.md").exists() else None)
+    fc, sl, cs = forecast_inputs(ctx_file0, avd, wd)
+    if milestone:
+        kids = milestone.pop("children", [])
+        start0, _ = iteration_dates(rep["sprint_label"], rep["date"])
+        for line in review_checks(epics, sl, cs, rep["date"], start0):
+            print("⚑ " + line)
+        if fc and kids:
+            milestone["forecast"] = forecast(epics, kids, fc, rep["date"], milestone["end"])
+            f = milestone["forecast"]
+            if f:
+                print(f"Milestone: {f['done']*100:.0f}% done · {f['remaining']} items left · P50 {f['p50']} · P85 {f['p85']}"
+                      f" · {f['probAll']*100:.0f}% chance all by {f['deadline']} · by deadline ~{f['itemsMedian']} items")
+        else:
+            print("Milestone forecast: no Cycle Time Sample on the context page or no children in epics.json — old bar (done/total children)")
+    # LPP Time to Solution (75th pct, days) — WORK_DIR/lpp.json {"headless": 6.8, "company": 8.41, "since": "YYYY-MM-DD"}
+    lpp_file = wd / "lpp.json"
+    lpp = json.loads(lpp_file.read_text()) if lpp_file.exists() else None
     ctx_file = a.context_file or (str(wd / "context_scratch.md") if (wd / "context_scratch.md").exists() else None)
     roster = load_roster(ctx_file)
     pr_file = a.pr_data_file or (str(wd / "pr_data.json") if (wd / "pr_data.json").exists() else None)
@@ -590,7 +780,7 @@ def main():
             cur = info.setdefault(k, {})
             cur.setdefault("summary", v.get("summary", "")); cur.setdefault("status", v.get("status", ""))
             cur.setdefault("status_cat", v.get("statusCategory", ""))
-    page, s = render(rep, info, milestone, it, epics, clean_testray(testray), avd, roster, prs)
+    page, s = render(rep, info, milestone, it, epics, clean_testray(testray), avd, roster, prs, lpp)
     out = Path(a.out) if a.out else wd / f"board_{rep['date']}.html"
     out.write_text(page)
     print(f"Board {BOARD_VERSION} → {out}")
